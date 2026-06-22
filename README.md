@@ -3,7 +3,7 @@
 PUDA-compatible packaging of the **probot** instrument platform (Keysight SMU +
 Pico G2V LED + Ender 3-axis "ProbeBot" stage).
 
-The platform is exposed as **two** ViPSA-style edge services, plus the original
+The platform is exposed as **two** edge services, plus the original
 Tkinter GUI running on the *same* driver code:
 
 | Member | Machine id | Hardware | Notes |
