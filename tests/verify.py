@@ -107,7 +107,7 @@ def check(name, cond):
 # --------------------------------------------------------------------------
 print("1. import safety")
 import probot_drivers
-from probot_drivers import SMUKeysightProbotMachine, StageProbot, measurement_list, orchestrator_probot
+from probot_drivers import SMUKeysightProbotMachine, StageProbot, measurement_list, probot_orchestrator
 
 import keysight   # gui shim
 import pico       # gui shim
@@ -181,7 +181,7 @@ class FakeStage:
 fstage = FakeStage()
 ran = []
 plan = [{"measurement": "Keysight_JV_PV"}, {"measurement": "Keysight_Voc_decay"}]
-results = orchestrator_probot.run_scan(
+results = probot_orchestrator.run_scan(
     None, fstage, plan,
     cells=[1, 2], num_loops=1, mode="regular",
     run_measurement=lambda item, cell: ran.append((item["measurement"], cell)) or "ok",
@@ -196,7 +196,7 @@ check("results recorded", len(results) == 4 and results[0]["cell"] == 1)
 
 # stop hook halts the scan
 fstage2 = FakeStage()
-orchestrator_probot.run_scan(
+probot_orchestrator.run_scan(
     None, fstage2, [{"measurement": "m"}],
     cells=[1, 2, 3], num_loops=1, mode="regular",
     should_stop=lambda: True,
@@ -205,7 +205,7 @@ check("should_stop halts before any cell", [e[0] for e in fstage2.events] == ["s
 
 # custom mode does not auto-return to safe
 fstage3 = FakeStage()
-orchestrator_probot.run_scan(
+probot_orchestrator.run_scan(
     None, fstage3, [{"measurement": "m"}],
     cells=[1], num_loops=1, mode="custom",
     run_measurement=lambda item, cell: None,
@@ -233,7 +233,7 @@ class FakeMachine:
 
 machine = FakeMachine()
 fstage4 = FakeStage()
-orchestrator_probot.run_scan(
+probot_orchestrator.run_scan(
     machine, fstage4,
     [{"measurement": "Keysight_JV_PV", "params": {"v_max": 1.0, "compliance": 100}}],
     cells=[5], num_loops=1, mode="regular",
@@ -268,10 +268,10 @@ check("pico.PicoInstrument() constructs", pico.PicoInstrument() is not None)
 print("7. measurement output envelope")
 import inspect
 from typing import Any, Dict
-from probot_drivers.measurement_probot import _measurement_result, MeasurementProbot
+from probot_drivers.probot_measurement import _measurement_result, ProbotMeasurement
 
 
-class _Dummy(MeasurementProbot):
+class _Dummy(ProbotMeasurement):
     def __init__(self):
         self._param_dir = "."
         self._data_dir = "."

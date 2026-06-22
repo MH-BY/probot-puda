@@ -1,42 +1,44 @@
 """Shared driver library for the probot platform.
 
-Used by both the PUDA edge services (``smu-keysight-probot``, ``stage-probot``)
+Used by both the PUDA edge services (``probot-smu-keysight``, ``probot-stage``)
 and the Tkinter GUI (via the ``gui`` shims), so hardware control has a single
 source of truth.
 
 Edge machine drivers:
 
-* :class:`SMUKeysightProbotMachine` - the ``smu-keysight-probot`` edge
+* :class:`SMUKeysightProbotMachine` - the ``probot-smu-keysight`` edge
   (Keysight SMU + Pico light + the measurement routines). Needs the ``smu`` extra.
-* :class:`StageProbot` - the ``stage-probot`` edge (Ender 3-axis stage). Needs the
+* :class:`ProbotStage` - the ``probot-stage`` edge (Ender 3-axis stage). Needs the
   ``stage`` extra.
 
 The SMU and light are co-located in one machine because several measurements drive
 the light inline during the SMU acquisition; the stage is independent.
 
 Imports are **lazy** (PEP 562): importing this package pulls no heavy dependencies,
-so the lean ``stage-probot`` edge does not need numpy/pandas/pyvisa just to import
-``StageProbot``. Each name loads its module (and that module's deps) on first access.
+so the lean ``probot-stage`` edge does not need numpy/pandas/pyvisa just to import
+``ProbotStage``. Each name loads its module (and that module's deps) on first access.
 """
 
 import importlib
 
 # Public name -> submodule that defines it.
 _EXPORTS = {
-    "SMUKeysightProbotMachine": "machine_smu_probot",
-    "StageProbot": "stage_probot",
-    "SMUKeysightProbot": "smu_keysight_probot",
-    "PicoProbot": "pico_probot",
-    "MeasurementProbot": "measurement_probot",
-    "measurement_list": "measurement_probot",
-    "MEASUREMENT_NAMES": "measurement_probot",
+    "SMUKeysightProbotMachine": "probot_machine_smu",
+    "ProbotStage": "probot_stage",
+    "StageProbot": "probot_stage",
+    "SMUKeysightProbot": "probot_smu_keysight",
+    "PicoProbot": "probot_pico",
+    "ProbotMeasurement": "probot_measurement",
+    "MeasurementProbot": "probot_measurement",
+    "measurement_list": "probot_measurement",
+    "MEASUREMENT_NAMES": "probot_measurement",
 }
 
-__all__ = list(_EXPORTS) + ["orchestrator_probot"]
+__all__ = list(_EXPORTS) + ["probot_orchestrator"]
 
 
 def __getattr__(name):
-    if name == "orchestrator_probot":
+    if name == "probot_orchestrator":
         return importlib.import_module(f".{name}", __name__)
     module = _EXPORTS.get(name)
     if module is None:

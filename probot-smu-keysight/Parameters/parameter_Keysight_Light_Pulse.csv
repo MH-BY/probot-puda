@@ -1,0 +1,10 @@
+Parameter,Value
+read_voltage,0.5
+trigger_period,0.1
+front_rest_duration,2
+read_duration,10.0
+compliance,10.0
+measure_delay_position,0.5
+light_intensity,20.0
+light_on_duration,1
+light_off_duration,1

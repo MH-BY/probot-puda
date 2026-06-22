@@ -9,12 +9,12 @@ requires-python = ">=3.11,<3.13"
 dependencies = []
 
 [project.optional-dependencies]
-# stage-probot edge: Ender 3-axis stage over serial.
+# probot-stage edge: Ender 3-axis stage over serial.
 stage = [
     "pyserial>=3.5",
     "controllably",     # Ender controller (vendor API)
 ]
-# smu-keysight-probot edge: Keysight SMU (VISA) + Pico light + measurement routines.
+# probot-smu-keysight edge: Keysight SMU (VISA) + Pico light + measurement routines.
 smu = [
     "pyvisa>=1.14.1",
     "g2vpico",          # Pico G2V LED controller (vendor API)

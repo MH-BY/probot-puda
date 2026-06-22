@@ -1,0 +1,11 @@
+Parameter,Value
+trigger_period,0.1
+light_intensity,10
+wait_time,1
+light_on_duration,5
+light_off_duration,5
+on_off_cycles,1
+read_time,5
+source_voltage,0
+compliance_current,1.00E-03
+measure_delay_position,0.5

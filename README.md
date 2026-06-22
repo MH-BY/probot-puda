@@ -8,15 +8,15 @@ Tkinter GUI running on the *same* driver code:
 
 | Member | Machine id | Hardware | Notes |
 |---|---|---|---|
-| `smu-keysight-probot` | `smu-keysight-probot` | Keysight SMU + Pico light | co-located: several measurements drive the light inline during the SMU sweep |
-| `stage-probot` | `stage-probot` | Ender 3-axis stage | independent, lean edge |
+| `probot-smu-keysight` | `probot-smu-keysight` | Keysight SMU + Pico light | co-located: several measurements drive the light inline during the SMU sweep |
+| `probot-stage` | `probot-stage` | Ender 3-axis stage | independent, lean edge |
 | `gui` | — | both (in-process) | the Tkinter GUI on shared drivers |
 | `probot_drivers` | — | — | shared driver library (one source of truth) |
 
 A full cell scan spans both machines, so **PUDA orchestrates the loop** by calling
-`stage-probot`'s move/probe primitives interleaved with `smu-keysight-probot`'s
+`probot-stage`'s move/probe primitives interleaved with `probot-smu-keysight`'s
 measurement primitives. The canonical sequence is
-`probot_drivers.orchestrator_probot.run_scan`, which the GUI also uses in-process.
+`probot_drivers.probot_orchestrator.run_scan`, which the GUI also uses in-process.
 
 ## Where to run
 
@@ -29,7 +29,7 @@ the repo on any OS — the drivers are import-safe without hardware.
 
 ```bash
 # per edge:
-cd smu-keysight-probot   # or stage-probot
+cd probot-smu-keysight   # or probot-stage
 cp .env.example .env      # edit MACHINE_ID, NATS_SERVERS, addresses
 uv sync                   # smu edge: add --extra analysis for Keysight_HT_PotDep
 uv run python main.py

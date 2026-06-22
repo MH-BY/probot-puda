@@ -1,0 +1,16 @@
+[project]
+name = "probot-stage-edge"
+version = "0.1.0"
+description = "PUDA edge service for the probot Ender 3-axis stage."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "puda==0.0.15",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "python-dotenv>=1.2.1",
+    "setuptools<81",
+    "websocket-client>=1.8.0",
+    "psutil>=6.1.1",
+    "probot-drivers[stage]",
+]

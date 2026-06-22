@@ -5,9 +5,9 @@ expects a module-level ``measurement_list()`` and a no-arg ``KeysightInstrument`
 class, then calls ``getattr(instrument, measurement)(cell_number)``.
 
 This shim preserves that exact contract while delegating to the shared
-``probot_drivers`` package, so the GUI and the PUDA ``smu-keysight-probot`` edge
+``probot_drivers`` package, so the GUI and the PUDA ``probot-smu-keysight`` edge
 run identical driver code. A single process-wide
-:class:`~probot_drivers.machine_smu_probot.SMUKeysightProbotMachine` backs every
+:class:`~probot_drivers.probot_machine_smu.SMUKeysightProbotMachine` backs every
 ``KeysightInstrument()`` (the GUI builds one per measurement) so the VISA session
 and Pico connection are opened once, not per cell.
 
@@ -20,7 +20,7 @@ import os
 import logging
 
 from probot_drivers import SMUKeysightProbotMachine
-from probot_drivers.measurement_probot import measurement_list as _measurement_list
+from probot_drivers.probot_measurement import measurement_list as _measurement_list
 
 logger = logging.getLogger(__name__)
 

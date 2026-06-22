@@ -8,11 +8,11 @@ there is a single source of truth for hardware control.
 
 | Module | Class | Hardware |
 |---|---|---|
-| `smu_keysight_probot` | `SMUKeysightProbot` | Keysight SMU (PyVISA / SCPI) |
-| `pico_probot` | `PicoProbot` | Pico G2V LED (Ethernet) |
-| `stage_probot` | `StageProbot` | Ender 3-axis stage (serial) |
-| `measurement_probot` | `MeasurementProbot` | the ~23 `Keysight_*` measurement routines (mixin) |
-| `orchestrator_probot` | `run_scan(...)` | shared cell-scan loop (move → probe → measure → unprobe) |
+| `probot_smu_keysight` | `SMUKeysightProbot` | Keysight SMU (PyVISA / SCPI) |
+| `probot_pico` | `PicoProbot` | Pico G2V LED (Ethernet) |
+| `probot_stage` | `StageProbot` | Ender 3-axis stage (serial) |
+| `probot_measurement` | `ProbotMeasurement` | the ~23 `Keysight_*` measurement routines (mixin) |
+| `probot_orchestrator` | `run_scan(...)` | shared cell-scan loop (move → probe → measure → unprobe) |
 | `probot` | `Probot` | composite machine wiring all of the above |
 
 `analysis/ht_potdep.py` (Bayesian optimization, needs the `analysis` extra) and

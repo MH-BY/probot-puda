@@ -2,7 +2,7 @@
 
 The GUI does ``import pico`` then ``pico.PicoInstrument()`` (no args) and calls
 ``light_on()`` / ``light_off()``. This shim subclasses the shared
-:class:`~probot_drivers.pico_probot.PicoProbot` (which carries those methods) and
+:class:`~probot_drivers.probot_pico.PicoProbot` (which carries those methods) and
 connects on construction, reproducing the original behaviour.
 
 Unlike the original ``pico.py``, there is **no** module-level singleton / network

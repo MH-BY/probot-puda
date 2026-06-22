@@ -2,8 +2,8 @@
 setlocal
 
 for %%E in (
-  smu-keysight-probot
-  stage-probot
+  probot-smu-keysight
+  probot-stage
 ) do (
   start "%%E" /D "%~dp0%%E" cmd /k start_edge.bat
 )

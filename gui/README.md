@@ -2,7 +2,7 @@
 
 The original Tkinter GUI, running on the shared `probot_drivers` package (no
 fork). It talks to both machines **in-process** (SMU+light and stage), so a full
-cell scan runs locally here via the shared `orchestrator_probot.run_scan`.
+cell scan runs locally here via the shared `probot_orchestrator.run_scan`.
 
 The three modules `keysight.py`, `pico.py`, `probebot.py` are thin compatibility
 shims that preserve the GUI's original plugin contract while delegating to

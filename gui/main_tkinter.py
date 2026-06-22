@@ -14,7 +14,7 @@ import time
 import copy
 
 # Shared cell-scan orchestration (used by BOTH this GUI and the PUDA edge service).
-from probot_drivers import orchestrator_probot
+from probot_drivers import probot_orchestrator
 
 # Initialize ProbeBot
 probe_bot = ProbeBot()
@@ -928,7 +928,7 @@ class App:
         """Regular measurement: probe/unprobe for each cell (shared orchestrator)."""
         try:
             plan, run_measurement = self._build_scan_plan(use_queue)
-            orchestrator_probot.run_scan(
+            probot_orchestrator.run_scan(
                 None, probe_bot, plan,
                 cells=cell_list, num_loops=num_loop, mode="regular",
                 should_stop=self.stop_event.is_set,
@@ -947,7 +947,7 @@ class App:
         """Custom measurement: probe once per cell, no auto return-to-safe (GUI prompts)."""
         try:
             plan, run_measurement = self._build_scan_plan(use_queue)
-            orchestrator_probot.run_scan(
+            probot_orchestrator.run_scan(
                 None, probe_bot, plan,
                 cells=cell_list, num_loops=num_loop, mode="custom",
                 should_stop=self.stop_event.is_set,

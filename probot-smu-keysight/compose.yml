@@ -1,0 +1,19 @@
+services:
+  edge:
+    build:
+      context: ..
+      dockerfile: probot-smu-keysight/Dockerfile
+    image: ghcr.io/pudap/probot-smu-keysight-edge:latest
+    container_name: probot-smu-keysight-edge
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/probot-smu-keysight/.env:ro
+      # Writable parameter + data directories (params get rewritten at runtime).
+      - ./Parameters:/app/probot-smu-keysight/Parameters
+      - ./Data:/app/probot-smu-keysight/Data
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
