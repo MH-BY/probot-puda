@@ -1,0 +1,10 @@
+Parameter,Value
+write_voltage,2.0
+erase_voltage,-2.0
+read_voltage,0.7
+trigger_period,0.05
+write_duration,10.0
+erase_duration,10.0
+read_duration,30.0
+measure_delay_position,0.5
+compliance,100.0

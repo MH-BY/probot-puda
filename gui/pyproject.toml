@@ -1,0 +1,14 @@
+[project]
+name = "probot-gui"
+version = "0.1.0"
+description = "Tkinter GUI for the probot platform, running on the shared probot_drivers (SMU+light and stage)."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+# The GUI talks to both machines in-process, so it needs both driver extras
+# (pandas comes in via the smu extra). Add the analysis extra to run Keysight_HT_PotDep.
+dependencies = [
+    "probot-drivers[smu,stage]",
+]
+
+[project.optional-dependencies]
+analysis = ["probot-drivers[smu,stage,analysis]"]

@@ -1,0 +1,43 @@
+[project]
+name = "probot-drivers"
+version = "0.1.0"
+description = "Shared hardware drivers for the probot platform (Keysight SMU, Pico G2V light, Ender stage) used by the PUDA edge services and the Tkinter GUI."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+# Base import is dependency-free (lazy __init__). Each edge/GUI pulls what it needs
+# via the extras below, so the lean stage edge does not install the SMU stack.
+dependencies = []
+
+[project.optional-dependencies]
+# stage-probot edge: Ender 3-axis stage over serial.
+stage = [
+    "pyserial>=3.5",
+    "controllably",     # Ender controller (vendor API)
+]
+# smu-keysight-probot edge: Keysight SMU (VISA) + Pico light + measurement routines.
+smu = [
+    "pyvisa>=1.14.1",
+    "g2vpico",          # Pico G2V LED controller (vendor API)
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+]
+# Bayesian-optimization stack used only by Keysight_HT_PotDep / analysis.ht_potdep
+# (imported lazily). Combine with the smu extra.
+analysis = [
+    "torch>=2.2",
+    "botorch>=0.10",
+    "gpytorch>=1.11",
+    "seaborn>=0.13",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+probot_drivers = ["parameters/*.csv"]

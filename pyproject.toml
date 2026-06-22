@@ -1,0 +1,27 @@
+# PUDA workspace for the probot platform.
+#
+# Members:
+#   - smu-keysight-probot : PUDA edge service for the Keysight SMU + Pico light
+#   - stage-probot        : PUDA edge service for the Ender 3-axis stage
+#   - gui                 : the Tkinter GUI (runs on the shared drivers, in-process)
+#   - probot_drivers      : the shared hardware driver library used by all of the
+#                           above (no fork — one source of truth)
+[project]
+name = "probot-puda"
+version = "0.1.0"
+description = "PUDA edge services and shared drivers for the probot instrument platform."
+readme = "README.md"
+# torch / botorch wheels are not yet published for 3.14 (which Vipsa uses), so the
+# probot stack targets a torch-supported interpreter.
+requires-python = ">=3.11,<3.13"
+
+[tool.uv.workspace]
+members = [
+    "smu-keysight-probot",
+    "stage-probot",
+    "gui",
+    "probot_drivers",
+]
+
+[tool.uv.sources]
+probot-drivers = { workspace = true }

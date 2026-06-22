@@ -1,0 +1,5 @@
+Parameter,Value
+csv_path,"r""C:\Users\AMDM\Desktop\test.csv"""
+trigger_period,0.1
+compliance,0.001
+measure_delay_position,0.5

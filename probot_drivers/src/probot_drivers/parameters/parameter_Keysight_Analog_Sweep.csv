@@ -1,0 +1,8 @@
+Parameter,Value
+set_v_max,0.5
+reset_v_min,-0.5
+volt_step,0.02
+compliance,100.0
+trigger_period,0.05
+no_cycles,20.0
+measure_delay_position,0.5
