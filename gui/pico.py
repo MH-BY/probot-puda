@@ -20,7 +20,7 @@ class PicoInstrument(PicoProbot):
 
     def __init__(self):
         super().__init__(
-            ip=os.environ.get("PICO_IP", "169.254.182.113"),
-            device_id=os.environ.get("PICO_ID", "00000000e11c66da"),
+            ip=os.environ.get("PICO_IP") or None,
+            device_id=os.environ.get("PICO_ID") or None,
         )
         self.startup()

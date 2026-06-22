@@ -27,4 +27,4 @@ resolve and the cwd-relative `Parameters/` folder is found.
 - Parameters are read/written in `./Parameters` (a working copy is shipped here);
   point `PARAM_DIR` elsewhere to share with an edge service.
 - Connection settings honour the same env vars as the edges (`KEYSIGHT_ADDRESS`,
-  `PICO_IP`, `PICO_ID`, `STAGE_PORT`), falling back to the original lab defaults.
+  `PICO_IP`, `PICO_ID`, `STAGE_PORT`); unset values fall back to `None`/`COM3`.

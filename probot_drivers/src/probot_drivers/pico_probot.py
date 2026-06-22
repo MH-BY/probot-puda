@@ -31,8 +31,9 @@ class PicoProbot:
         """Store connection config (does not connect).
 
         Args:
-            ip: IP address of the Pico controller (e.g. ``"169.254.182.113"``).
-            device_id: Pico device serial id (e.g. ``"00000000e11c66da"``).
+            ip: IP address of the Pico controller (typically link-local,
+                e.g. ``"169.254.x.x"``).
+            device_id: Pico device serial id (the controller's hardware id).
         """
         self.ip = ip
         self.device_id = device_id

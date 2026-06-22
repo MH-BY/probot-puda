@@ -11,8 +11,9 @@ run identical driver code. A single process-wide
 ``KeysightInstrument()`` (the GUI builds one per measurement) so the VISA session
 and Pico connection are opened once, not per cell.
 
-Connection settings come from the environment (same names as the edge ``.env``),
-falling back to the original hardcoded lab values.
+Connection settings come from the environment (same names as the edge ``.env``):
+``KEYSIGHT_ADDRESS``, ``PICO_IP``, ``PICO_ID``, ``STAGE_PORT``. Unset values fall
+back to ``None`` (the SMU then auto-selects the first VISA resource).
 """
 
 import os
@@ -42,8 +43,8 @@ def _get_machine() -> SMUKeysightProbotMachine:
         machine = SMUKeysightProbotMachine(
             smu_address=os.environ.get("KEYSIGHT_ADDRESS") or None,
             smu_device_no=int(os.environ.get("KEYSIGHT_DEVICE_NO", "0")),
-            pico_ip=os.environ.get("PICO_IP", "169.254.182.113"),
-            pico_id=os.environ.get("PICO_ID", "00000000e11c66da"),
+            pico_ip=os.environ.get("PICO_IP") or None,
+            pico_id=os.environ.get("PICO_ID") or None,
             # The GUI's execute_measurement writes parameters to a cwd-relative
             # "Parameters" folder, so the machine must read from the same place.
             param_dir=os.environ.get("PARAM_DIR") or "Parameters",
