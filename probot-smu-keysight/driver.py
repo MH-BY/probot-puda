@@ -307,6 +307,34 @@ class SMUKeysightDriver:
             pass
         return path
 
+    def _load_params(self, resolved_path: str) -> Dict[str, Any]:
+        """Read a parameter CSV and return ``{key: value}`` with native Python types.
+
+        Values are parsed with :func:`ast.literal_eval` so scalars (``int``,
+        ``float``) and structured literals (lists, tuples, etc.) round-trip
+        correctly.  Plain strings are kept as-is when the literal parse fails.
+
+        Args:
+            resolved_path: Full filesystem path to the CSV file as returned by
+                :meth:`_param_file`.  The CSV must have ``Parameter`` and
+                ``Value`` columns (standard header row).
+
+        Returns:
+            Dict[str, Any]: mapping of parameter name → parsed value.
+        """
+        params: Dict[str, Any] = {}
+        with open(resolved_path) as f:
+            for row in csv.DictReader(f):
+                key = row.get('Parameter', '').strip()
+                raw = row.get('Value', '').strip()
+                if not key:
+                    continue
+                try:
+                    params[key] = ast.literal_eval(raw)
+                except (SyntaxError, ValueError):
+                    params[key] = raw
+        return params
+
     def _data_path(self, *parts):
         """Return (creating if needed) a data output directory under the data root."""
         d = os.path.join(self._data_dir, *parts)
@@ -670,34 +698,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure analog sweep for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_analog_pulse.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         # make a pulse train
         
@@ -737,26 +739,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure PPF for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Paired_Pulse_Facilitation.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -778,8 +762,7 @@ class SMUKeysightDriver:
             full_pulse_set = np.concatenate([full_pulse_set, pulse_set])
             
         pulse_train = full_pulse_set
-        logger.debug('Pulse_train:')
-        logger.debug("%s", pulse_train)
+        logger.debug('Pulse_train: %s', pulse_train)
         
         pulse_train_string = ','.join(map(str,pulse_train))
         trigger_count = str(int(len(pulse_train)))
@@ -814,26 +797,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure SDDP for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Spike_Duration_DP.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -852,8 +817,7 @@ class SMUKeysightDriver:
             full_pulse_set = np.concatenate([full_pulse_set, pulse_set])
             
         pulse_train = full_pulse_set
-        logger.debug('Pulse_train:')
-        logger.debug("%s", pulse_train)
+        logger.debug('Pulse_train: %s', pulse_train)
         
         pulse_train_string = ','.join(map(str,pulse_train))
         trigger_count = str(int(len(pulse_train)))
@@ -888,26 +852,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure SVDP for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Spike_Voltage_DP.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -926,8 +872,7 @@ class SMUKeysightDriver:
             full_pulse_set = np.concatenate([full_pulse_set, pulse_set])
             
         pulse_train = full_pulse_set
-        logger.debug('Pulse_train:')
-        logger.debug("%s", pulse_train)
+        logger.debug('Pulse_train: %s', pulse_train)
         
         pulse_train_string = ','.join(map(str,pulse_train))
         trigger_count = str(int(len(pulse_train)))
@@ -962,26 +907,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure digital switching retention for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Digital_Retention.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -995,8 +922,7 @@ class SMUKeysightDriver:
 
 
         pulse_train = full_pulse_set
-        logger.debug('Pulse_train:')
-        logger.debug("%s", pulse_train)
+        logger.debug('Pulse_train: %s', pulse_train)
         
         pulse_train_string = ','.join(map(str,pulse_train))
         trigger_count = str(int(len(pulse_train)))
@@ -1031,26 +957,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure Digital J-V sweep for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Digital_Sweep.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_set_reset_sweep = np.array([], dtype=float)
@@ -1130,26 +1038,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure Analog I-V sweep for cell'+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Analog_Sweep.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a voltage wave 
         full_set_reset_sweep = np.array([], dtype=float)
@@ -1254,26 +1144,8 @@ class SMUKeysightDriver:
         """
         logger.info('Perform SET-RESET I-V sweep for cell'+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_set_reset_sweep.csv')
-    
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as infile:
-            reader = csv.DictReader(infile)
-            for row in reader:
-                param_name = row['Parameter'].strip()
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
     
         
         def make_sweeps():
@@ -1385,26 +1257,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure Resistivity of scaffolds '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Substrate_R.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_forward_reverse_sweep = np.array([], dtype=float)
@@ -1494,26 +1348,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure J-V of PV cell: '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_JV_PV.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #scan_are set. therefore we need to calculate the trigger period
         trigger_period = float(volt_step*1000/scan_rate)
@@ -1708,34 +1544,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure analog sweep for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Light_Pulse.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -1747,8 +1557,7 @@ class SMUKeysightDriver:
         full_pulse_set = np.concatenate([front_rest, read_pulse])
             
         pulse_train = full_pulse_set
-        logger.debug('Pulse_train:')
-        logger.debug("%s", pulse_train)
+        logger.debug('Pulse_train: %s', pulse_train)
     
         pulse_train_string = ','.join(map(str,pulse_train))
         trigger_count = str(int(len(pulse_train)))
@@ -1794,26 +1603,8 @@ class SMUKeysightDriver:
         """
         logger.info('Measure voltage steady state '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_voltage_steady.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -1862,26 +1653,8 @@ class SMUKeysightDriver:
             """
             logger.info('Measure Current against voltage list input '+str(cell_number))
             file_parameters = self._param_file('parameter_Keysight_voltage_list.csv')
-
-            # Dictionary to store parameters
-            parameters = {}
-            with open(file_parameters, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    param_name = row['Parameter']
-                    param_value = row['Value'].strip()
-                    # Use ast.literal_eval to convert string to Python literal if possible
-                    # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                    try:
-                        param_value = ast.literal_eval(param_value)
-                    except (SyntaxError, ValueError):
-                        # If it's not a literal (e.g., a normal string), keep it as a string
-                        pass
-                    parameters[param_name] = param_value
-                    #print(param_value)
-            # Create variables in the global namespace
-            for p_name, p_value in parameters.items():
-                globals()[p_name] = p_value
+            parameters = self._load_params(file_parameters)
+            globals().update(parameters)
             
             voltage_df = pd.read_csv(csv_path)
             pulse_train = voltage_df["voltage_list"].to_numpy(dtype=float)
@@ -1982,33 +1755,8 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct potentiation and depression cycle for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Potent_Depress.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -2111,33 +1859,8 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct potentiation and depression cycle for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Potent_Depress_2.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -2339,40 +2062,15 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Voc_decay.csv')
-        
+
         #conduct light soaking
         #self.pico_instrument.light_on()
         #print('conduct light soaking for 5 minutes')
         #time.sleep(60*5)
         #self.pico_instrument.light_off()
-        
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
 
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a wave
         full_on_off_pulses = np.array([], dtype=float) #initialize full on off pulses
@@ -2496,39 +2194,15 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Voc_profile.csv')
-        
+
         #conduct light soaking
         #self.pico_instrument.light_on()
         #print('conduct light soaking for 5 minutes')
         #time.sleep(60*5)
         #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
 
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a light pulse train with wait time before the pulses
         pre_exposure_time = np.full(int(wait_time/trigger_period), source_current, dtype=float)
@@ -2641,39 +2315,15 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Jsc rise and decay measurement for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Jsc_profile.csv')
-        
+
         #conduct light soaking
         #self.pico_instrument.light_on()
         #print('conduct light soaking for 5 minutes')
         #time.sleep(60*5)
         #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
 
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
 
         #make a light pulse train with wait time before the pulses
         pre_exposure_time = np.full(int(wait_time/trigger_period), source_voltage, dtype=float)
@@ -2782,39 +2432,17 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Voc_decay_indiv_soaking.csv')
-        
+
         #conduct light soaking
         #self.pico_instrument.light_on()
         #print('conduct light soaking for 5 minutes')
         #time.sleep(60*5)
         #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
 
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
+
+        soaking_time = parameters["soaking_time"]
 
         #make a wave
         full_on_off_pulses = np.array([], dtype=float) #initialize full on off pulses
@@ -2958,34 +2586,10 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Voc rise and decay measurement under varying light pulse for cell '+str(cell_number))
         file_parameters = self._param_file('parameter_Keysight_Voc_decay_ON_OFF_Variation.csv')
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-    
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
-    
+        parameters = self._load_params(file_parameters)
+        globals().update(parameters)
+
+
         #design of current signals for the waveform
         pre_exposure_pulse = np.full(int(wait_time/trigger_period), source_current, dtype=float)
         full_on_off_pulses = np.array([], dtype=float) #initialize full on off pulses
@@ -3101,29 +2705,8 @@ class SMUKeysightDriver:
                 ``outputs`` is empty and ``result`` is ``None``.
         """
         file_parameters = self._param_file('parameter_Keysight_Time_Gap.csv')
-    
-        parameters = {}
-    
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)
-    
-            for rows in reader:
-                if not rows or len(rows) < 2:
-                    continue
-    
-                key = rows[0].strip()
-                value = rows[1].strip()
-    
-                try:
-                    value = float(value)
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass
-    
-                parameters[key] = value
-    
+        parameters = self._load_params(file_parameters)
+
         if "sleep" in parameters: 
             sleep_time = parameters["sleep"]
         else: 
