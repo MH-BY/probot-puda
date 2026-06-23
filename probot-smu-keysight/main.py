@@ -15,7 +15,7 @@ import psutil
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from puda import EdgeNatsClient, EdgeRunner
 
-from probot_drivers import SMUKeysightProbotMachine
+from driver import SMUKeysightDriver
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +64,7 @@ async def main():
     logger.info("Full config: %s", config.model_dump())
 
     logger.info("Initializing machine driver")
-    driver = SMUKeysightProbotMachine(
+    driver = SMUKeysightDriver(
         smu_address=config.keysight_address,
         smu_device_no=config.keysight_device_no,
         pico_ip=config.pico_ip,

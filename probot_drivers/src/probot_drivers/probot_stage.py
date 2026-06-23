@@ -9,9 +9,6 @@ Refactor of the original ``probebot.py``. Changes versus the original:
 * **Configurable port / geometry.** ``COM3`` and the reference positions are
   constructor arguments.
 * Adds :meth:`get_position` (for edge telemetry) and :meth:`move_to_cell`.
-
-Original method names (``probing`` / ``unprobing`` / ``move_to_safeposition``)
-are kept as aliases so the GUI's direct calls continue to work.
 """
 
 from __future__ import annotations
@@ -36,8 +33,8 @@ class ProbotStage:
 
     def __init__(
         self,
-        port: str = "COM3",
-        safe_height: float = 80,
+        port: str,
+        safe_height: float,
         cell0_position: list | None = None,
         safe_position: list | None = None,
     ) -> None:
@@ -155,18 +152,10 @@ class ProbotStage:
 
     def move_to_cell81(self) -> None:
         """Move to cell 81 and wait for the stage to settle."""
-        cells = self.cell_coordinates()
-        self.mover.moveTo(cells[80])
+        self.mover.moveTo(self.cell_coordinates()[80])
         time.sleep(2)
 
     def move_to_safeposition(self) -> None:
         """Move to the parking/safe position and wait for the stage to settle."""
         self.mover.moveTo(self.safe_position)
         time.sleep(2)
-
-    # Backwards-compatible aliases for the GUI's existing calls.
-    probing = probe
-    unprobing = unprobe
-
-
-StageProbot = ProbotStage

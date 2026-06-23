@@ -1,18 +1,19 @@
 """Shared driver library for the probot platform.
 
-Used by both the PUDA edge services (``probot-smu-keysight``, ``probot-stage``)
-and the Tkinter GUI (via the ``gui`` shims), so hardware control has a single
-source of truth.
+Used by the PUDA edge services (``probot-smu-keysight``, ``probot-stage``) and the
+Tkinter GUI (via the ``gui`` shims), so hardware control
+has a single source of truth.
 
-Edge machine drivers:
+Edge machine drivers (from the shared library):
 
-* :class:`SMUKeysightProbotMachine` - the ``probot-smu-keysight`` edge
-  (Keysight SMU + Pico light + the measurement routines). Needs the ``smu`` extra.
-* :class:`ProbotStage` - the ``probot-stage`` edge (Ender 3-axis stage). Needs the
+* :class:`SMUKeysightProbotMachine` - composite SMU+light+measurements driver.
+  The ``probot-smu-keysight`` edge now uses its own self-contained
+  ``driver.py`` (:class:`SMUKeysightDriver`) which imports analysis helpers
+  from this package.  Needs the ``smu`` extra.
+* :class:`PicoProbot` - Pico G2V light controller.  Used internally by the
+  SMU machine for inline light-synchronised measurements.
+* :class:`ProbotStage` - Ender 3-axis stage (``probot-stage`` edge). Needs the
   ``stage`` extra.
-
-The SMU and light are co-located in one machine because several measurements drive
-the light inline during the SMU acquisition; the stage is independent.
 
 Imports are **lazy** (PEP 562): importing this package pulls no heavy dependencies,
 so the lean ``probot-stage`` edge does not need numpy/pandas/pyvisa just to import

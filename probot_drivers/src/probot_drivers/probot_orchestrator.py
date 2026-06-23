@@ -11,8 +11,8 @@ Callers supply:
 * ``machine`` - object exposing the measurement methods (the composite
   :class:`~probot_drivers.probot.Probot`, or the GUI's ``KeysightInstrument``
   shim) and a ``_param_file`` resolver,
-* ``stage``   - object exposing ``cell_coordinates``/``move_to``/``probing``/
-  ``unprobing``/``move_to_safeposition`` (the :class:`StageProbot` or its shim),
+* ``stage``   - object exposing ``cell_coordinates``/``move_to``/``probe``/
+  ``unprobe``/``move_to_safeposition`` (the :class:`StageProbot` or its shim),
 * control hooks ``should_stop`` / ``is_paused`` / ``on_progress`` (the GUI wires
   its ``stop_event.is_set`` / ``pause_event.is_set`` / ``print_to_output``; the
   edge service passes its own or the defaults).
@@ -133,7 +133,7 @@ def run_scan(
                 on_progress(f"Processing Cell {cell_number}")
 
                 stage.move_to(coords[cell_number - 1])
-                stage.probing()
+                stage.probe()
 
                 for item in plan:
                     if should_stop():
@@ -150,7 +150,7 @@ def run_scan(
                         on_progress("Measurement paused.")
                         time.sleep(1)
 
-                stage.unprobing()
+                stage.unprobe()
 
                 while is_paused():
                     on_progress("Measurement paused.")
