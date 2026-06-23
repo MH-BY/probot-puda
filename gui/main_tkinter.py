@@ -1088,7 +1088,7 @@ class App:
 
     def move_to_cell_backend(self, cell_number):
         self.print_to_output(f"Moving to cell {cell_number}...")
-        coordinates = probe_bot.cell_coordinates()
+        coordinates = probe_bot.get_cell_coordinates()
         position = coordinates[cell_number - 1]
         probe_bot.move_to(position)
         self.print_to_output(f"✓ Reached cell {cell_number}")

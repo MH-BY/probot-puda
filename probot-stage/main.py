@@ -1,7 +1,7 @@
 """Main entry point for the probot-stage machine edge service.
 
 PUDA edge service for the probot Ender 3-axis "ProbeBot" stage. Mirrors the Vipsa
-machine-template ``main.py``. Exposes the stage primitives (cell_coordinates,
+machine-template ``main.py``. Exposes the stage primitives (get_cell_coordinates,
 move_to, move_to_cell, probe/unprobe, move_to_cell1/81, move_to_safeposition) and
 publishes the live stage position as telemetry.
 """

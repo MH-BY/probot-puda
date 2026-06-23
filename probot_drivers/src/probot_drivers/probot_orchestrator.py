@@ -11,7 +11,7 @@ Callers supply:
 * ``machine`` - object exposing the measurement methods (the composite
   :class:`~probot_drivers.probot.Probot`, or the GUI's ``KeysightInstrument``
   shim) and a ``_param_file`` resolver,
-* ``stage``   - object exposing ``cell_coordinates``/``move_to``/``probe``/
+* ``stage``   - object exposing ``get_cell_coordinates``/``move_to``/``probe``/
   ``unprobe``/``move_to_safeposition`` (the :class:`StageProbot` or its shim),
 * control hooks ``should_stop`` / ``is_paused`` / ``on_progress`` (the GUI wires
   its ``stop_event.is_set`` / ``pause_event.is_set`` / ``print_to_output``; the
@@ -118,7 +118,7 @@ def run_scan(
             return run_one_measurement(machine, item, cell_number, on_progress)
 
     cells = list(cells)
-    coords = stage.cell_coordinates()
+    coords = stage.get_cell_coordinates()
     results: list[dict] = []
 
     try:

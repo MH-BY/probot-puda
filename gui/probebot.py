@@ -1,7 +1,7 @@
 """GUI compatibility shim for the ProbeBot stage.
 
 The GUI does ``from probebot import ProbeBot`` then ``ProbeBot()`` (no args) and
-calls ``cell_coordinates`` / ``move_to`` / ``probe`` / ``unprobe`` /
+calls ``get_cell_coordinates`` / ``move_to`` / ``probe`` / ``unprobe`` /
 ``move_to_cell1`` / ``move_to_cell81`` / ``move_to_safeposition``.
 
 This shim subclasses the shared :class:`~probot_drivers.probot_stage.StageProbot`

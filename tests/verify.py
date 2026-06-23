@@ -138,7 +138,7 @@ for prim in ("light_on", "light_off", "identify", "home", "shutdown", "startup",
     check(f"smu primitive present: {prim}", callable(getattr(smu, prim, None)))
 check("smu get_position returns {}", smu.get_position() == {})
 
-for prim in ("cell_coordinates", "move_to", "move_to_cell", "probe", "unprobe",
+for prim in ("get_cell_coordinates", "move_to", "move_to_cell", "probe", "unprobe",
              "move_to_cell1", "move_to_cell81",
              "move_to_safeposition", "home", "shutdown", "startup", "get_position"):
     check(f"stage primitive present: {prim}", callable(getattr(stage, prim, None)))
@@ -162,7 +162,7 @@ class FakeStage:
     def __init__(self):
         self.events = []
 
-    def cell_coordinates(self):
+    def get_cell_coordinates(self):
         return [[i, i, i] for i in range(81)]
 
     def move_to(self, pos):

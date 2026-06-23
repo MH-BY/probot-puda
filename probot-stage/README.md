@@ -3,7 +3,7 @@
 PUDA edge service for the probot **Ender 3-axis "ProbeBot" stage**. A separate,
 lean edge (only the `stage` driver extra: pyserial + controllably).
 
-Primitives exposed: `cell_coordinates`, `move_to`, `move_to_cell`, `probe` /
+Primitives exposed: `get_cell_coordinates`, `move_to`, `move_to_cell`, `probe` /
 `unprobe` (aka `probing`/`unprobing`), `move_to_cell1`, `move_to_cell81`,
 `move_to_safeposition`, `home`. Publishes the live stage position as telemetry.
 
