@@ -34,10 +34,12 @@ from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
+import pyvisa
 from scipy.stats import linregress
 
-from probot_drivers.analysis import pv_param as PV_calc
 from probot_drivers import PicoProbot
+from probot_drivers.analysis import ht_potdep as HTPD
+from probot_drivers.analysis import pv_param as PV_calc
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ MEASUREMENT_NAMES = [
 
 
 class SMUKeysightDriver:
-    """Keysight SMU + Pico G2V light driver (probot-smu-keysight edge).
+    """Keysight SMU + Pico G2V light driver.
 
     Combines the VISA transport, measurement routines, and PUDA machine interface
     into a single class.  The constructor stores configuration only; call
@@ -71,8 +73,8 @@ class SMUKeysightDriver:
         self,
         smu_address: str | None = None,
         smu_device_no: int = 0,
-        pico_ip: str | None = None,
-        pico_id: str | None = None,
+        pico_ip: str,
+        pico_id: str,
     ) -> None:
         """Store connection config (does not connect).
 
@@ -174,10 +176,9 @@ class SMUKeysightDriver:
         if self.smu is not None:
             return True
         try:
-            import pyvisa
             self._rm = pyvisa.ResourceManager()
             address = self._smu_address
-            if address is None:
+            if not address:
                 resources = list(self._rm.list_resources())
                 if not resources:
                     raise RuntimeError("No VISA resources found")
@@ -207,11 +208,6 @@ class SMUKeysightDriver:
     # ══════════════════════════════════════════════════════════════════════
     # PRIVATE — SCPI / data helpers
     # ══════════════════════════════════════════════════════════════════════
-
-    def _htpd(self):
-        """Lazily import the HT_PotDep analysis module."""
-        from probot_drivers.analysis import ht_potdep as HTPD
-        return HTPD
 
     def _make_voltage_pulses(self, pulse_voltage, read_voltage, trigger_period,
                              measure_delay_position, pulse_duration, read_duration,
@@ -374,7 +370,7 @@ class SMUKeysightDriver:
             pulses_length = len(df) - rest_length
             pulse_length = pulses_length / pulse_no
             df['Cycle'] = ((df.index - rest_length) // pulse_length) + 1
-            return self._htpd().main(df, cell_number)
+            return HTPD.main(df, cell_number)
         except Exception:
             logger.exception('Pot_Dep_Calculation failed')
             return None
@@ -1305,7 +1301,7 @@ class SMUKeysightDriver:
                 t_pulse_to_pulse=t_p2p,
             )
             results.append(result.get("fitting_params", {}))
-            self._htpd().make_results_summary(result.get("fitting_params"))
+            HTPD.make_results_summary(result.get("fitting_params"))
         logger.debug("--Initial sampling finished--")
 
         self.Keysight_Analog_Sweep(cell_number)
@@ -1313,10 +1309,10 @@ class SMUKeysightDriver:
         logger.debug("--Start BO sampling. Total campaigns = %s", bo_campaigns)
         for i in range(bo_campaigns):
             time.sleep(inter_measurement_delay)
-            self._htpd().main_BO(cell_number)
+            HTPD.main_BO(cell_number)
             result = self.Keysight_Potent_Depress_2(cell_number)
             results.append(result.get("fitting_params", {}))
-            self._htpd().make_results_summary(result.get("fitting_params"))
+            HTPD.make_results_summary(result.get("fitting_params"))
         logger.debug("--BO sampling finished--")
 
         return {"cell_number": cell_number, "results": results}
@@ -1742,10 +1738,10 @@ class SMUKeysightDriver:
         Args:
             cell_number: 1-based cell index.
             trigger_period: seconds per sample point. Default 0.01.
-            light_intensity: Pico light intensity (0–100 %). Default 10.
+            light_intensity: Pico light intensity (0-100 %). Default 10.
             wait_time: pre-measurement idle time in s. Default 0.5.
-            light_off_duration1–5: dark durations per level in s.
-            light_on1–5: light-on durations per level in s.
+            light_off_duration1-5: dark durations per level in s.
+            light_on1-5: light-on durations per level in s.
             on_off_cycles: number of on/off cycles. Default 2.
             source_current: SMU source current in A. Default 0.0.
             voltage_compliance: voltage compliance in V. Default 1.0.
@@ -1756,12 +1752,11 @@ class SMUKeysightDriver:
         """
         logger.info('Conduct Voc decay ON/OFF variation for cell %s', cell_number)
         if self.smu is None:
-            logger.info("Error: SMU is not connected.")
-            return {"cell_number": cell_number, "time": [], "voltage": [], "current": []}
+            raise RuntimeError("SMU is not connected")
 
         pre_exposure = np.full(int(wait_time / trigger_period), source_current, dtype=float)
         full_on_off_pulses = np.array([], dtype=float)
-        for cycle in range(on_off_cycles):
+        for _ in range(on_off_cycles):
             on1 = np.full(int(light_on1 / trigger_period), source_current, dtype=float)
             off1 = np.full(int(light_off_duration1 / trigger_period), source_current, dtype=float)
             on2 = np.full(int(light_on2 / trigger_period), source_current, dtype=float)

@@ -2855,8 +2855,7 @@ class ProbotMeasurement:
         trigger_count = str(int(len(wait_time_full_on_off_pulses)))
         #send to instrument
         if self.smu is None:
-            print("Error: SMU is not connected. Aborting measurement.")
-            return None
+            raise RuntimeError("SMU is not connected")
         
         print('SENDING COMMANDS TO INSTRUMENT')
         
