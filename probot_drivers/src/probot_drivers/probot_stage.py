@@ -133,18 +133,35 @@ class ProbotStage:
         time.sleep(movement_wait)
 
     def move_to_cell(self, cell_number: int) -> None:
-        """Move to a cell by 1-based cell number."""
+        """Move the probe over a cell by its 1-based cell number (1-81).
+
+        Step 1 of measuring a cell. The full per-cell sequence a scan should follow
+        is: ``move_to_cell(n)`` -> ``probe()`` -> run the measurement on the
+        ``smu-keysight-probot`` machine (e.g. ``Keysight_JV_PV(cell_number=n, ...)``)
+        -> ``unprobe()``. Repeat for each cell, then ``move_to_safeposition()``.
+
+        Args:
+            cell_number: 1-based cell index (1-81) in the 9x9 grid.
+        """
         cells = self.cell_coordinates()
         self.move_to(cells[cell_number - 1])
 
     def probe(self) -> None:
-        """Lower the probe 10 mm to make contact."""
+        """Lower the probe to contact the current cell (call after ``move_to_cell``).
+
+        Establishes electrical contact so the SMU measurement can run. Always pair
+        with :meth:`unprobe` once the measurement on that cell has finished.
+        """
         logger.debug("Probing")
         self.mover.moveBy([0, -10, 0])
         time.sleep(0.5)
 
     def unprobe(self) -> None:
-        """Raise the probe 10 mm to release contact."""
+        """Raise the probe to release contact (call after the measurement finishes).
+
+        Run once the ``smu-keysight-probot`` measurement for this cell has returned,
+        before moving to the next cell.
+        """
         logger.debug("Unprobing")
         self.mover.moveBy([0, 10, 0])
 
@@ -160,7 +177,11 @@ class ProbotStage:
         time.sleep(2)
 
     def move_to_safeposition(self) -> None:
-        """Move to the parking/safe position and wait for the stage to settle."""
+        """Park the probe at the safe position (call once, after the whole scan).
+
+        Run at the very end of a multi-cell scan (after the last cell's ``unprobe``)
+        to retract the probe to a safe location.
+        """
         self.mover.moveTo(self.safe_position)
         time.sleep(2)
 

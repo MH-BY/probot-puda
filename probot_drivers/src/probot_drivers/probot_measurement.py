@@ -535,22 +535,33 @@ class ProbotMeasurement:
         read_voltage: float = 0.2,
         trigger_period: float = 0.1,
         measure_delay_position: float = 0.5,
-        pulse_duration: int = 1,
-        read_duration: int = 60,
+        pulse_duration: float = 1.0,
+        read_duration: float = 60.0,
         no_of_pulses: int = 5,
-        compliance: int = 1,
+        compliance: float = 1.0,
     ) -> Dict[str, Any]:
         """Apply a train of identical read/write voltage pulses and record the current.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_analog_pulse.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            pulse_voltage: pulse voltage (V). Default 0.3.
+            read_voltage: read voltage (V). Default 0.2.
+            trigger_period: trigger period (s). Default 0.1.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            pulse_duration: pulse duration (s). Default 1.0.
+            read_duration: read duration (s). Default 60.0.
+            no_of_pulses: no of pulses (count). Default 5.
+            compliance: compliance (mA). Default 1.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure analog sweep for cell '+str(cell_number))
         parameters = {"pulse_voltage": pulse_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "pulse_duration": pulse_duration, "read_duration": read_duration, "no_of_pulses": no_of_pulses, "compliance": compliance}
@@ -584,8 +595,8 @@ class ProbotMeasurement:
         read_voltage: float = 0.1,
         trigger_period: float = 0.05,
         pulse_duration: float = 0.1,
-        delta_t: list | None = None,
-        rest_period: int = 1,
+        delta_t: list|None = None,
+        rest_period: float = 1.0,
         compliance: float = 1.0,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
@@ -593,14 +604,25 @@ class ProbotMeasurement:
         inter-pulse interval in ``delta_t`` and record the response.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Paired_Pulse_Facilitation.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            pulse_voltage: pulse voltage (V). Default 0.6.
+            read_voltage: read voltage (V). Default 0.1.
+            trigger_period: trigger period (s). Default 0.05.
+            pulse_duration: pulse duration (s). Default 0.1.
+            delta_t: delta t. Default None.
+            rest_period: rest period (s). Default 1.0.
+            compliance: compliance (mA). Default 1.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure PPF for cell '+str(cell_number))
         if delta_t is None:
@@ -653,8 +675,8 @@ class ProbotMeasurement:
         pulse_voltage: float = 2.0,
         read_voltage: float = 0.1,
         trigger_period: float = 0.02,
-        pulse_durations: list | None = None,
-        rest_period: int = 5,
+        pulse_durations: list|None = None,
+        rest_period: float = 5.0,
         compliance: float = 100.0,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
@@ -662,14 +684,24 @@ class ProbotMeasurement:
         record the resulting conductance change.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Spike_Duration_DP.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            pulse_voltage: pulse voltage (V). Default 2.0.
+            read_voltage: read voltage (V). Default 0.1.
+            trigger_period: trigger period (s). Default 0.02.
+            pulse_durations: pulse durations (s). Default None.
+            rest_period: rest period (s). Default 5.0.
+            compliance: compliance (mA). Default 100.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure SDDP for cell '+str(cell_number))
         if pulse_durations is None:
@@ -716,11 +748,11 @@ class ProbotMeasurement:
     def Keysight_Spike_Voltage_DP(
         self,
         cell_number: int,
-        pulse_voltages: list | None = None,
+        pulse_voltages: list|None = None,
         read_voltage: float = 0.1,
         trigger_period: float = 0.02,
         pulse_duration: float = 0.5,
-        rest_period: int = 5,
+        rest_period: float = 5.0,
         compliance: float = 100.0,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
@@ -728,14 +760,24 @@ class ProbotMeasurement:
         record the resulting conductance change.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Spike_Voltage_DP.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            pulse_voltages: pulse voltages (V). Default None.
+            read_voltage: read voltage (V). Default 0.1.
+            trigger_period: trigger period (s). Default 0.02.
+            pulse_duration: pulse duration (s). Default 0.5.
+            rest_period: rest period (s). Default 5.0.
+            compliance: compliance (mA). Default 100.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure SVDP for cell '+str(cell_number))
         if pulse_voltages is None:
@@ -796,14 +838,26 @@ class ProbotMeasurement:
         the read current over cycles. (Also exposed as ``Keysight_Digital_Retention``.)
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Digital_Retention.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            write_voltage: write voltage (V). Default 2.0.
+            erase_voltage: erase voltage (V). Default -2.0.
+            read_voltage: read voltage (V). Default 0.7.
+            trigger_period: trigger period (s). Default 0.05.
+            write_duration: write duration (s). Default 10.0.
+            erase_duration: erase duration (V). Default 10.0.
+            read_duration: read duration (s). Default 30.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            compliance: compliance (mA). Default 100.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure digital switching retention for cell '+str(cell_number))
         parameters = {"write_voltage": write_voltage, "erase_voltage": erase_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "write_duration": write_duration, "erase_duration": erase_duration, "read_duration": read_duration, "measure_delay_position": measure_delay_position, "compliance": compliance}
@@ -848,21 +902,31 @@ class ProbotMeasurement:
         volt_step: float = 0.05,
         compliance: float = 100.0,
         trigger_period: float = 0.005,
-        no_cycles: float = 10.0,
+        no_cycles: int = 10,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
         """Digital I-V sweep: SET then RESET voltage sweeps over ``no_cycles``,
         recording the current per cycle.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Digital_Sweep.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            set_v_max: set v max (V). Default 1.2.
+            reset_v_min: reset v min (V). Default -0.01.
+            volt_step: volt step (V). Default 0.05.
+            compliance: compliance (mA). Default 100.0.
+            trigger_period: trigger period (s). Default 0.005.
+            no_cycles: no cycles (count). Default 10.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
+        - ``result``: None.
         """
         print('Measure Digital J-V sweep for cell '+str(cell_number))
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
@@ -937,21 +1001,31 @@ class ProbotMeasurement:
         volt_step: float = 0.02,
         compliance: float = 100.0,
         trigger_period: float = 0.05,
-        no_cycles: float = 20.0,
+        no_cycles: int = 20,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
         """Analog I-V sweep: continuous SET/RESET voltage sweeps recording the analog
         current response.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Analog_Sweep.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            set_v_max: set v max (V). Default 0.5.
+            reset_v_min: reset v min (V). Default -0.5.
+            volt_step: volt step (V). Default 0.02.
+            compliance: compliance (mA). Default 100.0.
+            trigger_period: trigger period (s). Default 0.05.
+            no_cycles: no cycles (count). Default 20.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
+        - ``result``: None.
         """
         print('Measure Analog I-V sweep for cell'+str(cell_number))
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
@@ -1046,12 +1120,12 @@ class ProbotMeasurement:
     def Keysight_set_reset_sweep(
         self,
         cell_number: int,
-        set_v_max: int = 1,
-        reset_v_min: int = 0,
+        set_v_max: float = 1.0,
+        reset_v_min: float = 0.0,
         volt_step: float = 0.01,
         no_cycles: int = 1,
         mode: str = 'set_only',
-        compliance: int = 1,
+        compliance: float = 1.0,
         trigger_period: float = 0.1,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
@@ -1059,14 +1133,25 @@ class ProbotMeasurement:
         (``'loop'`` / ``'separate'`` / ``'set_only'`` / ``'reset_only'``).
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_set_reset_sweep.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            set_v_max: set v max (V). Default 1.0.
+            reset_v_min: reset v min (V). Default 0.0.
+            volt_step: volt step (V). Default 0.01.
+            no_cycles: no cycles (count). Default 1.
+            mode: mode. Default 'set_only'.
+            compliance: compliance (mA). Default 1.0.
+            trigger_period: trigger period (s). Default 0.1.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-                - ``result``: the combined sweep DataFrame ``df_sweep_total``.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
+        - ``result``: the combined sweep DataFrame ``df_sweep_total``.
         """
         print('Perform SET-RESET I-V sweep for cell'+str(cell_number))
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "no_cycles": no_cycles, "mode": mode, "compliance": compliance, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position}
@@ -1180,14 +1265,24 @@ class ProbotMeasurement:
         """Measure substrate resistance via a small voltage sweep and a linear fit.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Substrate_R.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            v_max: v max (V). Default 1.0.
+            v_min: v min (V). Default -1.0.
+            volt_step: volt step (V). Default 0.1.
+            compliance: compliance (mA). Default 10.0.
+            trigger_period: trigger period (s). Default 0.1.
+            no_cycles: no cycles (count). Default 1.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure Resistivity of scaffolds '+str(cell_number))
         parameters = {"v_max": v_max, "v_min": v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
@@ -1266,13 +1361,13 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         v_min: float = -0.2,
-        v_max: int = 1,
+        v_max: float = 1.0,
         volt_step: float = 0.01,
         compliance: float = 100.0,
         scan_rate: float = 500.0,
         cell_area: float = 0.09,
         irr: float = 1.0,
-        no_cycles: float = 1.0,
+        no_cycles: int = 1,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
         """Photovoltaic J-V measurement: forward and reverse voltage sweeps per cycle,
@@ -1280,15 +1375,27 @@ class ProbotMeasurement:
         :mod:`probot_drivers.analysis.pv_param`.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_JV_PV.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            v_min: v min (V). Default -0.2.
+            v_max: v max (V). Default 1.0.
+            volt_step: volt step (V). Default 0.01.
+            compliance: compliance (mA). Default 100.0.
+            scan_rate: scan rate (mV/s). Default 500.0.
+            cell_area: cell area (cm^2). Default 0.09.
+            irr: irr. Default 1.0.
+            no_cycles: no cycles (count). Default 1.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds 'Voltage (V)', 'Current (mA)', 'Current Density (mA/cm2)', 'Cycle' plus the PV
-                  parameters (PCE, FF, Voc, Jsc, Rshunt, Rseries) per fwd/rev cycle.
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds 'Voltage (V)', 'Current (mA)', 'Current Density (mA/cm2)', 'Cycle' plus the PV
+        parameters (PCE, FF, Voc, Jsc, Rshunt, Rseries) per fwd/rev cycle.
+        - ``result``: None.
         """
         print('Measure J-V of PV cell: '+str(cell_number))
         parameters = {"v_min": v_min, "v_max": v_max, "volt_step": volt_step, "compliance": compliance, "scan_rate": scan_rate, "cell_area": cell_area, "irr": irr, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
@@ -1474,27 +1581,38 @@ class ProbotMeasurement:
         cell_number: int,
         read_voltage: float = 0.5,
         trigger_period: float = 0.1,
-        front_rest_duration: int = 2,
-        read_duration: int = 10,
-        compliance: int = 10,
+        front_rest_duration: float = 2.0,
+        read_duration: float = 10.0,
+        compliance: float = 10.0,
         measure_delay_position: float = 0.5,
-        light_intensity: int = 20,
-        light_on_duration: int = 1,
-        light_off_duration: int = 1,
+        light_intensity: float = 20.0,
+        light_on_duration: float = 1.0,
+        light_off_duration: float = 1.0,
     ) -> Dict[str, Any]:
-
         """Apply a voltage pulse train synchronized with Pico light pulses and record
         the optoelectronic response.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Light_Pulse.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            read_voltage: read voltage (V). Default 0.5.
+            trigger_period: trigger period (s). Default 0.1.
+            front_rest_duration: front rest duration (s). Default 2.0.
+            read_duration: read duration (s). Default 10.0.
+            compliance: compliance (mA). Default 10.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            light_intensity: light intensity (%). Default 20.0.
+            light_on_duration: light on duration (s). Default 1.0.
+            light_off_duration: light off duration (s). Default 1.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure analog sweep for cell '+str(cell_number))
         parameters = {"read_voltage": read_voltage, "trigger_period": trigger_period, "front_rest_duration": front_rest_duration, "read_duration": read_duration, "compliance": compliance, "measure_delay_position": measure_delay_position, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration}
@@ -1543,9 +1661,9 @@ class ProbotMeasurement:
     def Keysight_Voltage_Steady(
         self,
         cell_number: int,
-        pulse_voltages: list | None = None,
+        pulse_voltages: list|None = None,
         trigger_period: float = 0.1,
-        voltage_duration: int = 20,
+        voltage_duration: float = 20.0,
         compliance: float = 0.001,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
@@ -1553,14 +1671,22 @@ class ProbotMeasurement:
         (constant-voltage stress / retention).
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_voltage_steady.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            pulse_voltages: pulse voltages (V). Default None.
+            trigger_period: trigger period (s). Default 0.1.
+            voltage_duration: voltage duration (V). Default 20.0.
+            compliance: compliance (mA). Default 0.001.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Measure voltage steady state '+str(cell_number))
         if pulse_voltages is None:
@@ -1610,14 +1736,21 @@ class ProbotMeasurement:
             """Apply an arbitrary voltage list loaded from CSV and record the response.
 
             Args:
-                cell_number: 1-based cell index, used in the saved file name(s).
-                    Measurement settings are read from ``parameter_Keysight_voltage_list.csv``
-                    (columns ``Parameter, Value``).
+                cell_number: 1-based cell index (also labels the saved data files).
+                csv_path: csv path. Default 'C:\\Users\\AMDM\\Desktop\\test.csv'.
+                trigger_period: trigger period (s). Default 0.1.
+                compliance: compliance (mA). Default 0.001.
+                measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+            Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+            contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+            ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+            saved data.
 
             Returns:
-                Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                    - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                    - ``result``: None.
+            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+            - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+            - ``result``: None.
             """
             print('Measure Current against voltage list input '+str(cell_number))
             parameters = {"csv_path": csv_path, "trigger_period": trigger_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
@@ -1708,30 +1841,44 @@ class ProbotMeasurement:
     def Keysight_Potent_Depress(
         self,
         cell_number: int,
-        reset_period: int = 5,
+        reset_period: float = 5.0,
         write_voltage: float = 1.94,
         erase_voltage: float = -1.94,
         pulse_duration: float = 0.16,
         pulse_no: int = 50,
-        read_voltage: int = 1,
+        read_voltage: float = 1.0,
         read_duration: float = 0.16,
         cycle_write_erase: int = 10,
         trigger_period: float = 0.16,
         measure_delay_position: float = 0.5,
-        compliance: int = 100,
+        compliance: float = 100.0,
     ) -> Dict[str, Any]:
         """Potentiation/depression: apply repeated write then erase pulse trains over
         cycles and record the conductance change (synaptic weight update).
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Potent_Depress.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            reset_period: reset period (s). Default 5.0.
+            write_voltage: write voltage (V). Default 1.94.
+            erase_voltage: erase voltage (V). Default -1.94.
+            pulse_duration: pulse duration (s). Default 0.16.
+            pulse_no: pulse no (count). Default 50.
+            read_voltage: read voltage (V). Default 1.0.
+            read_duration: read duration (s). Default 0.16.
+            cycle_write_erase: cycle write erase (V). Default 10.
+            trigger_period: trigger period (s). Default 0.16.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            compliance: compliance (mA). Default 100.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct potentiation and depression cycle for cell '+str(cell_number))
         parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance}
@@ -1821,7 +1968,7 @@ class ProbotMeasurement:
     def Keysight_Potent_Depress_2(
         self,
         cell_number: int,
-        reset_period: int = 0,
+        reset_period: float = 0.0,
         write_voltage: float = 0.5,
         erase_voltage: float = -0.5,
         pulse_duration: float = 0.05,
@@ -1831,26 +1978,40 @@ class ProbotMeasurement:
         cycle_write_erase: int = 3,
         trigger_period: float = 0.05,
         measure_delay_position: float = 0.5,
-        compliance: int = 100,
+        compliance: float = 100.0,
         t_pulse_to_read: float = 0.2,
         t_pulse_to_pulse: float = 0.5,
-        wait_voltage: int = 0,
+        wait_voltage: float = 0.0,
     ) -> Dict[str, Any]:
-        #here the read pulse is only pulse in between 0 V
-        #the length of the waiting time = t_pulse_to_read + t_read + t_read_to_pulse
-
         """Potentiation/depression with explicit pulse-to-read and pulse-to-pulse
         timing control.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Potent_Depress_2.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            reset_period: reset period (s). Default 0.0.
+            write_voltage: write voltage (V). Default 0.5.
+            erase_voltage: erase voltage (V). Default -0.5.
+            pulse_duration: pulse duration (s). Default 0.05.
+            pulse_no: pulse no (count). Default 50.
+            read_voltage: read voltage (V). Default 0.1.
+            read_duration: read duration (s). Default 0.05.
+            cycle_write_erase: cycle write erase (V). Default 3.
+            trigger_period: trigger period (s). Default 0.05.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            compliance: compliance (mA). Default 100.0.
+            t_pulse_to_read: t pulse to read. Default 0.2.
+            t_pulse_to_pulse: t pulse to pulse. Default 0.5.
+            wait_voltage: wait voltage (V). Default 0.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: the fitting-parameters DataFrame ``df_output_parameters_fitting``.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: the fitting-parameters DataFrame ``df_output_parameters_fitting``.
         """
         print('Conduct potentiation and depression cycle for cell '+str(cell_number))
         parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance, "t_pulse_to_read": t_pulse_to_read, "t_pulse_to_pulse": t_pulse_to_pulse, "wait_voltage": wait_voltage}
@@ -2059,31 +2220,37 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         trigger_period: float = 0.1,
-        light_intensity: int = 50,
-        light_on_duration: int = 5,
-        light_off_duration: int = 10,
+        light_intensity: float = 50.0,
+        light_on_duration: float = 5.0,
+        light_off_duration: float = 10.0,
         on_off_cycles: int = 1,
-        source_current: int = 0,
-        compliance_voltage: int = 1,
+        source_current: float = 0.0,
+        compliance_voltage: float = 1.0,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
-        #this function is to measure the voc decay with light on/off
-        #the light pulse is done with pico
-        #here the read pulse is only pulse in between 0 V
-        #the length of the waiting time = t_pulse_to_read + t_read + t_read_to_pulse
-
         """Open-circuit voltage (Voc) decay: cycle the light on/off and record the Voc
         transient.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Voc_decay.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            trigger_period: trigger period (s). Default 0.1.
+            light_intensity: light intensity (%). Default 50.0.
+            light_on_duration: light on duration (s). Default 5.0.
+            light_off_duration: light off duration (s). Default 10.0.
+            on_off_cycles: on off cycles (count). Default 1.
+            source_current: source current. Default 0.0.
+            compliance_voltage: compliance voltage (mA). Default 1.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position}
@@ -2195,34 +2362,47 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         trigger_period: float = 0.1,
-        light_intensity: int = 6,
-        wait_time: int = 2,
-        light_on_duration: int = 10,
-        light_off_duration: int = 60,
+        light_intensity: float = 6.0,
+        wait_time: float = 2.0,
+        light_on_duration: float = 10.0,
+        light_off_duration: float = 60.0,
         on_off_cycles: int = 1,
-        read_time: int = 0,
-        source_current: int = 0,
-        compliance_voltage: int = 1,
+        read_time: float = 0.0,
+        source_current: float = 0.0,
+        compliance_voltage: float = 1.0,
         measure_delay_position: float = 0.5,
         NPLC_value: float = 0.01,
-        volt_sense_range: int = 2,
+        volt_sense_range: float = 2.0,
         curr_sense_range: float = 1e-07,
     ) -> Dict[str, Any]:
-        #this function is to measure the voc decay with light on/off
-        #the light pulse is done with pico
-
         """Voc profile: idle, then light on/off cycles, then a read period, recording
         the Voc transient.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Voc_profile.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            trigger_period: trigger period (s). Default 0.1.
+            light_intensity: light intensity (%). Default 6.0.
+            wait_time: wait time (s). Default 2.0.
+            light_on_duration: light on duration (s). Default 10.0.
+            light_off_duration: light off duration (s). Default 60.0.
+            on_off_cycles: on off cycles (count). Default 1.
+            read_time: read time (s). Default 0.0.
+            source_current: source current. Default 0.0.
+            compliance_voltage: compliance voltage (mA). Default 1.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            NPLC_value: NPLC value. Default 0.01.
+            volt_sense_range: volt sense range. Default 2.0.
+            curr_sense_range: curr sense range. Default 1e-07.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position, "NPLC_value": NPLC_value, "volt_sense_range": volt_sense_range, "curr_sense_range": curr_sense_range}
@@ -2324,30 +2504,40 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         trigger_period: float = 0.1,
-        light_intensity: int = 10,
-        wait_time: int = 1,
-        light_on_duration: int = 5,
-        light_off_duration: int = 5,
+        light_intensity: float = 10.0,
+        wait_time: float = 1.0,
+        light_on_duration: float = 5.0,
+        light_off_duration: float = 5.0,
         on_off_cycles: int = 1,
-        read_time: int = 5,
-        source_voltage: int = 0,
+        read_time: float = 5.0,
+        source_voltage: float = 0.0,
         compliance_current: float = 0.001,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
-        #this function is to measure the voc decay with light on/off
-        #the light pulse is done with pico
-
         """Short-circuit current (Jsc) profile under light on/off cycling.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Jsc_profile.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            trigger_period: trigger period (s). Default 0.1.
+            light_intensity: light intensity (%). Default 10.0.
+            wait_time: wait time (s). Default 1.0.
+            light_on_duration: light on duration (s). Default 5.0.
+            light_off_duration: light off duration (s). Default 5.0.
+            on_off_cycles: on off cycles (count). Default 1.
+            read_time: read time (s). Default 5.0.
+            source_voltage: source voltage (V). Default 0.0.
+            compliance_current: compliance current (mA). Default 0.001.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct Jsc rise and decay measurement for cell '+str(cell_number))
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_voltage": source_voltage, "compliance_current": compliance_current, "measure_delay_position": measure_delay_position}
@@ -2443,39 +2633,54 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         trigger_period: float = 0.1,
-        light_intensity: int = 100,
-        light_off_duration1: int = 1,
-        light_on1: int = 1,
-        light_off_duration2: int = 1,
-        light_on2: int = 1,
-        light_off_duration3: int = 1,
-        light_on3: int = 1,
-        light_off_duration4: int = 1,
-        light_on4: int = 1,
-        light_off_duration5: int = 1,
-        light_on5: int = 1,
+        light_intensity: float = 100.0,
+        light_off_duration1: float = 1.0,
+        light_on1: float = 1.0,
+        light_off_duration2: float = 1.0,
+        light_on2: float = 1.0,
+        light_off_duration3: float = 1.0,
+        light_on3: float = 1.0,
+        light_off_duration4: float = 1.0,
+        light_on4: float = 1.0,
+        light_off_duration5: float = 1.0,
+        light_on5: float = 1.0,
         on_off_cycles: int = 1,
-        source_current: int = 0,
-        compliance: int = 2,
+        source_current: float = 0.0,
+        compliance: float = 2.0,
         measure_delay_position: float = 0.5,
-        soaking_time: int = 0,
+        soaking_time: float = 0.0,
     ) -> Dict[str, Any]:
-        #this function is to measure the voc decay with light on/off
-        #the light pulse is done with pico
-                #here the read pulse is only pulse in between 0 V
-        #the length of the waiting time = t_pulse_to_read + t_read + t_read_to_pulse
-
         """Voc decay with multi-level light soaking before the on/off cycles.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Voc_decay_indiv_soaking.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            trigger_period: trigger period (s). Default 0.1.
+            light_intensity: light intensity (%). Default 100.0.
+            light_off_duration1: light off duration1 (s). Default 1.0.
+            light_on1: light on1 (s). Default 1.0.
+            light_off_duration2: light off duration2 (s). Default 1.0.
+            light_on2: light on2 (s). Default 1.0.
+            light_off_duration3: light off duration3 (s). Default 1.0.
+            light_on3: light on3 (s). Default 1.0.
+            light_off_duration4: light off duration4 (s). Default 1.0.
+            light_on4: light on4 (s). Default 1.0.
+            light_off_duration5: light off duration5 (s). Default 1.0.
+            light_on5: light on5 (s). Default 1.0.
+            on_off_cycles: on off cycles (count). Default 1.
+            source_current: source current. Default 0.0.
+            compliance: compliance (mA). Default 2.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+            soaking_time: soaking time (s). Default 0.0.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance": compliance, "measure_delay_position": measure_delay_position, "soaking_time": soaking_time}
@@ -2610,35 +2815,54 @@ class ProbotMeasurement:
         self,
         cell_number: int,
         trigger_period: float = 0.01,
-        light_intensity: int = 10,
+        light_intensity: float = 10.0,
         wait_time: float = 0.5,
         light_off_duration1: float = 0.1,
-        light_on1: int = 2,
-        light_off_duration2: int = 5,
-        light_on2: int = 0,
-        light_off_duration3: int = 0,
-        light_on3: int = 0,
-        light_off_duration4: int = 0,
-        light_on4: int = 0,
-        light_off_duration5: int = 0,
-        light_on5: int = 0,
+        light_on1: float = 2.0,
+        light_off_duration2: float = 5.0,
+        light_on2: float = 0.0,
+        light_off_duration3: float = 0.0,
+        light_on3: float = 0.0,
+        light_off_duration4: float = 0.0,
+        light_on4: float = 0.0,
+        light_off_duration5: float = 0.0,
+        light_on5: float = 0.0,
         on_off_cycles: int = 2,
-        source_current: int = 0,
-        voltage_compliance: int = 1,
+        source_current: float = 0.0,
+        voltage_compliance: float = 1.0,
         measure_delay_position: float = 0.5,
     ) -> Dict[str, Any]:
-        # this program is used to measure the impact of varying light soaking time as light pulse on Voc
         """Voc decay with variable light on/off durations per cycle.
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Voc_decay_ON_OFF_Variation.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index (also labels the saved data files).
+            trigger_period: trigger period (s). Default 0.01.
+            light_intensity: light intensity (%). Default 10.0.
+            wait_time: wait time (s). Default 0.5.
+            light_off_duration1: light off duration1 (s). Default 0.1.
+            light_on1: light on1 (s). Default 2.0.
+            light_off_duration2: light off duration2 (s). Default 5.0.
+            light_on2: light on2 (s). Default 0.0.
+            light_off_duration3: light off duration3 (s). Default 0.0.
+            light_on3: light on3 (s). Default 0.0.
+            light_off_duration4: light off duration4 (s). Default 0.0.
+            light_on4: light on4 (s). Default 0.0.
+            light_off_duration5: light off duration5 (s). Default 0.0.
+            light_on5: light on5 (s). Default 0.0.
+            on_off_cycles: on off cycles (count). Default 2.
+            source_current: source current. Default 0.0.
+            voltage_compliance: voltage compliance (mA). Default 1.0.
+            measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
+
+        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
+        ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
+        saved data.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-                - ``result``: None.
+        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
+        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
+        - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement under varying light pulse for cell '+str(cell_number))
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "voltage_compliance": voltage_compliance, "measure_delay_position": measure_delay_position}

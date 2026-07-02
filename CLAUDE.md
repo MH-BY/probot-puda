@@ -134,6 +134,38 @@ probot-puda/
    **case-insensitive fallback** (the source mixes `Voltage_Steady` vs
    `voltage_steady`).
 
+## Scan protocol (how PUDA sequences a request)
+
+A full cell scan spans **both** edges, so PUDA's planner composes it from the two
+machines' primitives (there is no single "scan" primitive — see decision 2). The
+primitives and their docstrings are written so the planner produces the correct
+choreography. Example — the request *"do JV measurement for cell 1 to 15 with
+voltage from -0.5 V to 1 V"* should yield this protocol (steps run sequentially;
+each waits for the previous to finish because primitives are synchronous):
+
+```
+for n in 1..15:
+  stage-probot.move_to_cell(cell_number=n)
+  stage-probot.probe()
+  smu-keysight-probot.Keysight_JV_PV(cell_number=n, v_min=-0.5, v_max=1.0)   # other params default
+  stage-probot.unprobe()                 # runs after the measurement returns
+stage-probot.move_to_safeposition()      # once, at the very end
+```
+
+Key points that make this reliable and correct:
+- **"Finished?" is implicit.** Measurements are synchronous — the `Keysight_JV_PV`
+  call returns (with the data envelope) only when the sweep is done — so the next
+  step (`unprobe`) naturally runs after completion. PUDA executes steps in order.
+- **Only overrides are passed.** `v_min`/`v_max` come from the request; every other
+  parameter uses its signature default. This is exactly why measurements take typed
+  args with defaults.
+- **The choreography is documented on the primitives** (`move_to_cell` → `probe` →
+  measure → `unprobe`, then `move_to_safeposition`) so the planner inserts probe /
+  unprobe / return-to-safe. If you add primitives, keep this contract in their
+  docstrings.
+- `cell_number` in the measurement only labels the saved data; the *stage* is what
+  physically moves (on the other edge).
+
 ## Conventions
 
 - **Naming:** probot-specific drivers carry a `*_probot` suffix (modules/classes)

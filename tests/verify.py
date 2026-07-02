@@ -310,6 +310,57 @@ for h in ("make_voltage_pulses", "send_pulse_train_to_keysight", "string_to_data
 
 
 # --------------------------------------------------------------------------
+# 9. PUDA scan protocol: "JV for cells 1-15, V from -0.5 to 1" choreography.
+# --------------------------------------------------------------------------
+print("9. scan protocol (cells 1-15 JV with voltage override)")
+
+
+class ProtoStage:
+    def __init__(self):
+        self.events = []
+
+    def cell_coordinates(self):
+        return [[i, i, i] for i in range(81)]
+
+    def move_to(self, pos):
+        self.events.append(("move", pos[0]))
+
+    def probing(self):
+        self.events.append(("probe", None))
+
+    def unprobing(self):
+        self.events.append(("unprobe", None))
+
+    def move_to_safeposition(self):
+        self.events.append(("safe", None))
+
+
+class ProtoMachine:
+    def __init__(self):
+        self.jv_calls = []
+
+    def Keysight_JV_PV(self, cell, **kw):
+        self.jv_calls.append((cell, kw))
+        return {"cell": cell}
+
+
+pstage, pmachine = ProtoStage(), ProtoMachine()
+probot_orchestrator.run_scan(
+    pmachine, pstage,
+    [{"measurement": "Keysight_JV_PV", "params": {"v_min": -0.5, "v_max": 1}}],
+    cells=list(range(1, 16)), num_loops=1, mode="regular",
+)
+# per-cell move->probe->unprobe for 15 cells, then one safe at the end
+expected_kinds = (["move", "probe", "unprobe"] * 15) + ["safe"]
+check("protocol: move->probe->unprobe x15 then safe",
+      [e[0] for e in pstage.events] == expected_kinds)
+check("protocol: JV run on all 15 cells in order",
+      [c for c, _ in pmachine.jv_calls] == list(range(1, 16)))
+check("protocol: only v_min/v_max overridden, rest default",
+      all(kw == {"v_min": -0.5, "v_max": 1} for _, kw in pmachine.jv_calls))
+
+
+# --------------------------------------------------------------------------
 print()
 passed = sum(1 for _, ok in _checks if ok)
 print(f"RESULT: {passed}/{len(_checks)} checks passed")
