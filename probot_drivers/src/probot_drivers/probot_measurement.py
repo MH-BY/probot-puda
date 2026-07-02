@@ -23,6 +23,7 @@ which is why every measurement lives in this single module.
 import csv
 import os
 import ast
+import time
 import functools
 from datetime import datetime
 from typing import Any, Dict
@@ -180,7 +181,43 @@ class ProbotMeasurement:
         self._outputs.append(rec)
         return rec
 
-    def make_voltage_pulses(self,pulse_voltage,read_voltage,trigger_period,measure_delay_position,pulse_duration,read_duration,no_of_pulses):
+    def _params_df(self, parameters: dict) -> "pd.DataFrame":
+        """Build the ``Parameter, Value`` settings DataFrame saved alongside data.
+
+        Replaces the original ``pd.read_csv(parameter_*.csv)`` now that settings
+        come in as method arguments; the two-column layout matches what the
+        original CSV-based flow produced for :meth:`_savefile` / :meth:`_savefile_1`.
+        """
+        return pd.DataFrame({
+            "Parameter": list(parameters.keys()),
+            "Value": list(parameters.values()),
+        })
+
+    def _read_params(self, name: str) -> dict:
+        """Read a ``Parameter, Value`` CSV into a typed ``{name: value}`` dict.
+
+        Used to bridge the CSV-interchange BO workflow (``Keysight_HT_PotDep`` /
+        ``analysis.ht_potdep``) to the now argument-based measurements: after the
+        optimizer rewrites ``parameter_Keysight_Potent_Depress_2.csv`` we read it
+        back and pass the values as keyword arguments.
+        """
+        out = {}
+        path = self._param_file(name)
+        with open(path, newline="") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for row in reader:
+                if len(row) < 2 or not row[0].strip():
+                    continue
+                key, raw = row[0].strip(), row[1].strip()
+                try:
+                    val = ast.literal_eval(raw)
+                except Exception:
+                    val = raw
+                out[key] = val
+        return out
+
+    def _make_voltage_pulses(self,pulse_voltage,read_voltage,trigger_period,measure_delay_position,pulse_duration,read_duration,no_of_pulses):
         #code to make voltage pulses
         """Build a repeated read+write voltage pulse train.
 
@@ -212,7 +249,7 @@ class ProbotMeasurement:
         #pass
     
     
-    def send_pulse_train_to_keysight(self, compliance, pulse_train_string,trigger_count,trigger_period,measure_delay):
+    def _send_pulse_train_to_keysight(self, compliance, pulse_train_string,trigger_count,trigger_period,measure_delay):
         
         """Run one voltage-list sweep on the SMU and return the raw buffer string.
 
@@ -271,7 +308,7 @@ class ProbotMeasurement:
 
 
     
-    def string_to_dataframe(self,output_string):# change the output data (string) to dataframe
+    def _string_to_dataframe(self,output_string):# change the output data (string) to dataframe
         """Parse the SMU buffer string into a DataFrame.
 
         Args:
@@ -291,7 +328,7 @@ class ProbotMeasurement:
             print('No output_string to convert to df')
             pass
     
-    def savefile(self,output_table,df_parameters,cell_number,keyword):
+    def _savefile(self,output_table,df_parameters,cell_number,keyword):
         """Save a measurement + its parameters to a timestamped CSV.
 
         Writes ``{keyword}_{cell:02d}_{datetime}.csv`` under the data directory
@@ -321,7 +358,7 @@ class ProbotMeasurement:
             print('no file to save')
             return None
 
-    def savefile_1(self,output_table,df_parameters,cell_number,keyword,plot_type):
+    def _savefile_1(self,output_table,df_parameters,cell_number,keyword,plot_type):
         """Save a measurement + parameters to a timestamped CSV and render its plot.
 
         Like :meth:`savefile` but stores under the ``Rohit_data/Carbon_solar_cell``
@@ -356,13 +393,13 @@ class ProbotMeasurement:
             df.to_csv(base_path + ".csv", index=True)
             print(f"File saved as: {base_path}.csv")
             
-            self.make_graph_IV_1(output_table,cell_number,plot_type,save_path=base_path)
+            self._make_graph_IV_1(output_table,cell_number,plot_type,save_path=base_path)
             return self._record_output(base_path + ".csv", keyword, output_table)
         except Exception as e:
             print(f" could  not save file: {e}")
             return None
 
-    def make_graph(self,output_table,cell_number):
+    def _make_graph(self,output_table,cell_number):
         """Plot current and voltage versus time on a twin-axis figure (non-blocking)."""
         try:
             print('start making graph')
@@ -382,7 +419,7 @@ class ProbotMeasurement:
             print('No graph to plot')
             pass   
     
-    def make_graph_IV(self,output_table,cell_number):
+    def _make_graph_IV(self,output_table,cell_number):
         """Plot ``|current|`` vs voltage for each SET/RESET cycle.
 
         Cycles are colour-graded and drawn on a log current scale for the given cell.
@@ -423,7 +460,7 @@ class ProbotMeasurement:
             print('No graph to plot')
             pass
 
-    def make_graph_IV_1(self,output_table,cell_number,plot_type,save_path=None):
+    def _make_graph_IV_1(self,output_table,cell_number,plot_type,save_path=None):
         """Flexible plot helper.
 
         When ``plot_type == 'IV'`` draws a per-cycle current-vs-voltage plot; otherwise
@@ -491,7 +528,18 @@ class ProbotMeasurement:
             pass
 
     @_measurement_result
-    def Keysight_analog_pulse(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_analog_pulse(
+        self,
+        cell_number: int,
+        pulse_voltage: float = 0.3,
+        read_voltage: float = 0.2,
+        trigger_period: float = 0.1,
+        measure_delay_position: float = 0.5,
+        pulse_duration: int = 1,
+        read_duration: int = 60,
+        no_of_pulses: int = 5,
+        compliance: int = 1,
+    ) -> Dict[str, Any]:
         """Apply a train of identical read/write voltage pulses and record the current.
 
         Args:
@@ -505,59 +553,42 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure analog sweep for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_analog_pulse.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"pulse_voltage": pulse_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "pulse_duration": pulse_duration, "read_duration": read_duration, "no_of_pulses": no_of_pulses, "compliance": compliance}
 
         # make a pulse train
         
-        pulse_train, pulse_train_string, trigger_count, measure_delay = self.make_voltage_pulses(pulse_voltage,read_voltage,trigger_period,measure_delay_position,pulse_duration,read_duration,no_of_pulses)
+        pulse_train, pulse_train_string, trigger_count, measure_delay = self._make_voltage_pulses(pulse_voltage,read_voltage,trigger_period,measure_delay_position,pulse_duration,read_duration,no_of_pulses)
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #Add column for set_voltage
         output_table['set_voltage (V)']= pd.Series(pulse_train)
         
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
+        df_parameters = self._params_df(parameters)
         
         
-        #self.savefile(output_table, df_parameters, cell_number,'AnalogPulse')
-        self.savefile_1(output_table,df_parameters,cell_number,'VoltagePulse',"x_time")
+        #self._savefile(output_table, df_parameters, cell_number,'AnalogPulse')
+        self._savefile_1(output_table,df_parameters,cell_number,'VoltagePulse',"x_time")
 
         #plot IV
-        self.make_graph_IV_1(output_table,cell_number,plot_type = "x_time")    
+        self._make_graph_IV_1(output_table,cell_number,plot_type = "x_time")    
 
     @_measurement_result
-    def Keysight_Paired_Pulse_Facilitation(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Paired_Pulse_Facilitation(
+        self,
+        cell_number: int,
+        pulse_voltage: float = 0.6,
+        read_voltage: float = 0.1,
+        trigger_period: float = 0.05,
+        pulse_duration: float = 0.1,
+        delta_t: list | None = None,
+        rest_period: int = 1,
+        compliance: float = 1.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Paired-pulse facilitation (PPF): apply pulse pairs separated by each
         inter-pulse interval in ``delta_t`` and record the response.
 
@@ -572,27 +603,9 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure PPF for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Paired_Pulse_Facilitation.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        if delta_t is None:
+            delta_t = [0.6]
+        parameters = {"pulse_voltage": pulse_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "pulse_duration": pulse_duration, "delta_t": delta_t, "rest_period": rest_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -623,18 +636,28 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'PPF')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'PPF')
 
         #make a graph
-        self.make_graph(output_table,cell_number)
+        self._make_graph(output_table,cell_number)
 
     @_measurement_result
-    def Keysight_Spike_Duration_DP(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Spike_Duration_DP(
+        self,
+        cell_number: int,
+        pulse_voltage: float = 2.0,
+        read_voltage: float = 0.1,
+        trigger_period: float = 0.02,
+        pulse_durations: list | None = None,
+        rest_period: int = 5,
+        compliance: float = 100.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Spike-duration-dependent plasticity: sweep the write-pulse duration and
         record the resulting conductance change.
 
@@ -649,27 +672,9 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure SDDP for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Spike_Duration_DP.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        if pulse_durations is None:
+            pulse_durations = [0.02, 0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.2, 0.3, 0.4, 0.5, 1]
+        parameters = {"pulse_voltage": pulse_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "pulse_durations": pulse_durations, "rest_period": rest_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -697,18 +702,28 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'SDDP')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'SDDP')
 
         #make a graph
-        self.make_graph(output_table,cell_number)
+        self._make_graph(output_table,cell_number)
 
     @_measurement_result
-    def Keysight_Spike_Voltage_DP(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Spike_Voltage_DP(
+        self,
+        cell_number: int,
+        pulse_voltages: list | None = None,
+        read_voltage: float = 0.1,
+        trigger_period: float = 0.02,
+        pulse_duration: float = 0.5,
+        rest_period: int = 5,
+        compliance: float = 100.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Spike-voltage-dependent plasticity: sweep the write-pulse voltage and
         record the resulting conductance change.
 
@@ -723,27 +738,9 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure SVDP for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Spike_Voltage_DP.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        if pulse_voltages is None:
+            pulse_voltages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+        parameters = {"pulse_voltages": pulse_voltages, "read_voltage": read_voltage, "trigger_period": trigger_period, "pulse_duration": pulse_duration, "rest_period": rest_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -771,18 +768,30 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'SVDP')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'SVDP')
 
         #make a graph
-        self.make_graph(output_table,cell_number)
+        self._make_graph(output_table,cell_number)
     
     @_measurement_result
-    def Keysight_Digital_Endurance(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Digital_Endurance(
+        self,
+        cell_number: int,
+        write_voltage: float = 2.0,
+        erase_voltage: float = -2.0,
+        read_voltage: float = 0.7,
+        trigger_period: float = 0.05,
+        write_duration: float = 10.0,
+        erase_duration: float = 10.0,
+        read_duration: float = 30.0,
+        measure_delay_position: float = 0.5,
+        compliance: float = 100.0,
+    ) -> Dict[str, Any]:
         """Digital endurance / retention: repeatedly SET/RESET the device and track
         the read current over cycles. (Also exposed as ``Keysight_Digital_Retention``.)
 
@@ -797,27 +806,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure digital switching retention for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Digital_Retention.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"write_voltage": write_voltage, "erase_voltage": erase_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "write_duration": write_duration, "erase_duration": erase_duration, "read_duration": read_duration, "measure_delay_position": measure_delay_position, "compliance": compliance}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -840,18 +829,28 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'RETENTION')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'RETENTION')
 
         #make a graph
-        self.make_graph(output_table,cell_number)
+        self._make_graph(output_table,cell_number)
 
     @_measurement_result
-    def Keysight_Digital_Sweep(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Digital_Sweep(
+        self,
+        cell_number: int,
+        set_v_max: float = 1.2,
+        reset_v_min: float = -0.01,
+        volt_step: float = 0.05,
+        compliance: float = 100.0,
+        trigger_period: float = 0.005,
+        no_cycles: float = 10.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Digital I-V sweep: SET then RESET voltage sweeps over ``no_cycles``,
         recording the current per cycle.
 
@@ -866,27 +865,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure Digital J-V sweep for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Digital_Sweep.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_set_reset_sweep = np.array([], dtype=float)
@@ -931,9 +910,9 @@ class ProbotMeasurement:
             measure_delay = str(trigger_period*measure_delay_position)
 
             #send pulse and get the output_string
-            output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table = self.string_to_dataframe(output_string)
+            output_table = self._string_to_dataframe(output_string)
             #add Cycle column to the output_table
             output_table['Cycle']=i+1
             #add column set_Voltage (V)
@@ -943,14 +922,24 @@ class ProbotMeasurement:
         
 
         #adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(df_sweep_total,df_parameters,cell_number,'DigiSweep')
+        df_parameters = self._params_df(parameters)
+        self._savefile(df_sweep_total,df_parameters,cell_number,'DigiSweep')
 
         #plot IV
-        self.make_graph_IV(df_sweep_total,cell_number)
+        self._make_graph_IV(df_sweep_total,cell_number)
 
     @_measurement_result
-    def Keysight_Analog_Sweep(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Analog_Sweep(
+        self,
+        cell_number: int,
+        set_v_max: float = 0.5,
+        reset_v_min: float = -0.5,
+        volt_step: float = 0.02,
+        compliance: float = 100.0,
+        trigger_period: float = 0.05,
+        no_cycles: float = 20.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Analog I-V sweep: continuous SET/RESET voltage sweeps recording the analog
         current response.
 
@@ -965,27 +954,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure Analog I-V sweep for cell'+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Analog_Sweep.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
         #make a voltage wave 
         full_set_reset_sweep = np.array([], dtype=float)
@@ -1031,9 +1000,9 @@ class ProbotMeasurement:
             measure_delay = str(trigger_period*measure_delay_position)
 
             #send pulse and get the output_string
-            output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table = self.string_to_dataframe(output_string)
+            output_table = self._string_to_dataframe(output_string)
             #add column set_Voltage (V)
             output_table['set_Voltage (V)']= pd.Series(set_sweep)
             #add Cycle column to the output_table
@@ -1053,9 +1022,9 @@ class ProbotMeasurement:
             measure_delay = str(trigger_period*measure_delay_position)
 
             #send pulse and get the output_string
-            output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table = self.string_to_dataframe(output_string)
+            output_table = self._string_to_dataframe(output_string)
             #add column set_Voltage (V)
             output_table['set_Voltage (V)']= pd.Series(reset_sweep)
             #add Cycle column to the output_table
@@ -1067,14 +1036,25 @@ class ProbotMeasurement:
         df_sweep_total = pd.concat([df_set_sweep,df_reset_sweep], ignore_index=True)
 
         #adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(df_sweep_total,df_parameters,cell_number,'AnaSweep')
+        df_parameters = self._params_df(parameters)
+        self._savefile(df_sweep_total,df_parameters,cell_number,'AnaSweep')
 
         #plot IV
-        self.make_graph_IV(df_sweep_total,cell_number)
+        self._make_graph_IV(df_sweep_total,cell_number)
 
     @_measurement_result
-    def Keysight_set_reset_sweep(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_set_reset_sweep(
+        self,
+        cell_number: int,
+        set_v_max: int = 1,
+        reset_v_min: int = 0,
+        volt_step: float = 0.01,
+        no_cycles: int = 1,
+        mode: str = 'set_only',
+        compliance: int = 1,
+        trigger_period: float = 0.1,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Configurable SET/RESET sweep honouring a ``mode`` parameter
         (``'loop'`` / ``'separate'`` / ``'set_only'`` / ``'reset_only'``).
 
@@ -1089,27 +1069,7 @@ class ProbotMeasurement:
                 - ``result``: the combined sweep DataFrame ``df_sweep_total``.
         """
         print('Perform SET-RESET I-V sweep for cell'+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_set_reset_sweep.csv')
-    
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as infile:
-            reader = csv.DictReader(infile)
-            for row in reader:
-                param_name = row['Parameter'].strip()
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "no_cycles": no_cycles, "mode": mode, "compliance": compliance, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position}
     
         
         def make_sweeps():
@@ -1148,10 +1108,10 @@ class ProbotMeasurement:
     
             try:
                 # Send pulses to instrument
-                output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string, trigger_count, trigger_period, measure_delay)
+                output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string, trigger_count, trigger_period, measure_delay)
   
                 # Convert response into DataFrame
-                output_table = self.string_to_dataframe(output_string)
+                output_table = self._string_to_dataframe(output_string)
             
                 # Add metadata
                 output_table["set_Voltage (V)"] = pd.Series(pulse_train, dtype=float)
@@ -1196,17 +1156,27 @@ class ProbotMeasurement:
                 df_sweep_total = pd.concat([df_sweep_total, run_sweep(reset_sweep, "Reset", i)], ignore_index=True)
 
         #adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile_1(df_sweep_total,df_parameters,cell_number,'set-reset_sweep',"IV")
+        df_parameters = self._params_df(parameters)
+        self._savefile_1(df_sweep_total,df_parameters,cell_number,'set-reset_sweep',"IV")
     
         #plot IV
-        self.make_graph_IV_1(df_sweep_total,cell_number,plot_type = "IV")    
+        self._make_graph_IV_1(df_sweep_total,cell_number,plot_type = "IV")    
     
         return df_sweep_total
 
     
     @_measurement_result
-    def Keysight_Substrate_R(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Substrate_R(
+        self,
+        cell_number: int,
+        v_max: float = 1.0,
+        v_min: float = -1.0,
+        volt_step: float = 0.1,
+        compliance: float = 10.0,
+        trigger_period: float = 0.1,
+        no_cycles: int = 1,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Measure substrate resistance via a small voltage sweep and a linear fit.
 
         Args:
@@ -1220,27 +1190,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure Resistivity of scaffolds '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Substrate_R.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"v_max": v_max, "v_min": v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_forward_reverse_sweep = np.array([], dtype=float)
@@ -1270,9 +1220,9 @@ class ProbotMeasurement:
             measure_delay = str(trigger_period*measure_delay_position)
 
             #send pulse and get the output_string
-            output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table = self.string_to_dataframe(output_string)
+            output_table = self._string_to_dataframe(output_string)
             
             #add Cycle column to the output_table
             output_table['Cycle']=i+1
@@ -1280,7 +1230,7 @@ class ProbotMeasurement:
             df_sweep_total = pd.concat([df_sweep_total,output_table], ignore_index = True)
 
         #adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
+        df_parameters = self._params_df(parameters)
 
         # Perform linear regression
         voltage = df_sweep_total['Voltage (V)']
@@ -1293,7 +1243,7 @@ class ProbotMeasurement:
         df_R = pd.DataFrame(data)
 
         df_parameters_calcparam = pd.concat([df_parameters, df_R],axis = 1)
-        self.savefile(df_sweep_total,df_parameters_calcparam,cell_number,'SubstR')
+        self._savefile(df_sweep_total,df_parameters_calcparam,cell_number,'SubstR')
 
  
         # Plot the data points
@@ -1312,7 +1262,19 @@ class ProbotMeasurement:
         plt.show()
 
     @_measurement_result
-    def Keysight_JV_PV(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_JV_PV(
+        self,
+        cell_number: int,
+        v_min: float = -0.2,
+        v_max: int = 1,
+        volt_step: float = 0.01,
+        compliance: float = 100.0,
+        scan_rate: float = 500.0,
+        cell_area: float = 0.09,
+        irr: float = 1.0,
+        no_cycles: float = 1.0,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Photovoltaic J-V measurement: forward and reverse voltage sweeps per cycle,
         converted to current density, with PV parameters extracted via
         :mod:`probot_drivers.analysis.pv_param`.
@@ -1329,27 +1291,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure J-V of PV cell: '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_JV_PV.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        parameters = {"v_min": v_min, "v_max": v_max, "volt_step": volt_step, "compliance": compliance, "scan_rate": scan_rate, "cell_area": cell_area, "irr": irr, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
         #scan_are set. therefore we need to calculate the trigger period
         trigger_period = float(volt_step*1000/scan_rate)
@@ -1372,9 +1314,9 @@ class ProbotMeasurement:
             forward_pulse_train_string = ','.join(map(str,forward_sweep))
             trigger_count = str(int(len(forward_sweep)))
             #send pulse and get the output_string
-            output_string_forward = self.send_pulse_train_to_keysight(compliance, forward_pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string_forward = self._send_pulse_train_to_keysight(compliance, forward_pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table_forward = self.string_to_dataframe(output_string_forward)#this contain Voltage (V), Current (A), Time (s). need to change to below
+            output_table_forward = self._string_to_dataframe(output_string_forward)#this contain Voltage (V), Current (A), Time (s). need to change to below
             #add Cycle column to the output_table
             output_table_forward['Cycle']=i+1
 
@@ -1389,7 +1331,7 @@ class ProbotMeasurement:
             })
 
             #settings 
-            df_settings = pd.read_csv(file_parameters) 
+            df_settings = self._params_df(parameters) 
             #concat setting to the data
             df_data_setting_fwd = pd.concat([df_JV_cooked_fwd,df_settings],axis=1)
             #----calculate the PV parameters--
@@ -1398,7 +1340,7 @@ class ProbotMeasurement:
 
             #----NEED TO ADD CALCULATION OF J-V parameters--
             file_name_tail = 'JV_PV_fwd_cycle'+str(i+1)
-            self.savefile(df_data_setting_fwd,df_PV_params_fwd,cell_number,file_name_tail)
+            self._savefile(df_data_setting_fwd,df_PV_params_fwd,cell_number,file_name_tail)
 
 
             #---REVERSE
@@ -1406,9 +1348,9 @@ class ProbotMeasurement:
             reverse_pulse_train_string = ','.join(map(str,reverse_sweep))
             trigger_count = str(int(len(reverse_sweep)))
             #send the pulse and get the output string
-            output_string_reverse = self.send_pulse_train_to_keysight(compliance,reverse_pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string_reverse = self._send_pulse_train_to_keysight(compliance,reverse_pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change strings to dataframe
-            output_table_reverse = self.string_to_dataframe(output_string_reverse)
+            output_table_reverse = self._string_to_dataframe(output_string_reverse)
             #add cycle column
             output_table_reverse['Cycle']=i+1
             #change the data format and parameters
@@ -1422,7 +1364,7 @@ class ProbotMeasurement:
             })
             
             #df setting 
-            df_settings = pd.read_csv(file_parameters) 
+            df_settings = self._params_df(parameters) 
             #concat setting to the data
             df_data_setting_rev = pd.concat([df_JV_cooked_rev,df_settings],axis=1)
             #----calculate the PV parameters--
@@ -1430,7 +1372,7 @@ class ProbotMeasurement:
             
 
             file_name_tail = 'JV_PV_rev_cycle'+str(i+1)
-            self.savefile(df_data_setting_rev,df_PV_params_rev,cell_number,file_name_tail)
+            self._savefile(df_data_setting_rev,df_PV_params_rev,cell_number,file_name_tail)
 
 
 
@@ -1462,7 +1404,7 @@ class ProbotMeasurement:
             # Show the plot
             plt.show()
 
-    def send_pulse_train_to_keysight_light_pulse(self, compliance, pulse_train_string,trigger_count,trigger_period,measure_delay,
+    def _send_pulse_train_to_keysight_light_pulse(self, compliance, pulse_train_string,trigger_count,trigger_period,measure_delay,
                                                  front_rest_duration, light_intensity, read_duration, light_on_duration, light_off_duration):
         
         """Run a voltage-list sweep while driving the Pico light.
@@ -1527,7 +1469,19 @@ class ProbotMeasurement:
         return output_string
     
     @_measurement_result
-    def Keysight_Light_Pulse(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Light_Pulse(
+        self,
+        cell_number: int,
+        read_voltage: float = 0.5,
+        trigger_period: float = 0.1,
+        front_rest_duration: int = 2,
+        read_duration: int = 10,
+        compliance: int = 10,
+        measure_delay_position: float = 0.5,
+        light_intensity: int = 20,
+        light_on_duration: int = 1,
+        light_off_duration: int = 1,
+    ) -> Dict[str, Any]:
 
         """Apply a voltage pulse train synchronized with Pico light pulses and record
         the optoelectronic response.
@@ -1543,35 +1497,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure analog sweep for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Light_Pulse.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"read_voltage": read_voltage, "trigger_period": trigger_period, "front_rest_duration": front_rest_duration, "read_duration": read_duration, "compliance": compliance, "measure_delay_position": measure_delay_position, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -1592,7 +1518,7 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight_light_pulse(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay, front_rest_duration, light_intensity, read_duration, light_on_duration, light_off_duration)
+        output_string = self._send_pulse_train_to_keysight_light_pulse(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay, front_rest_duration, light_intensity, read_duration, light_on_duration, light_off_duration)
         """
                 #create light pulses
                 #turn off at front rest
@@ -1605,16 +1531,24 @@ class ProbotMeasurement:
                                                 light_off_duration=light_off_duration)
         """      
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'LightPulse')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'LightPulse')
 
         #make a graph
-        self.make_graph(output_table,cell_number)
+        self._make_graph(output_table,cell_number)
 
     @_measurement_result
-    def Keysight_Voltage_Steady(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voltage_Steady(
+        self,
+        cell_number: int,
+        pulse_voltages: list | None = None,
+        trigger_period: float = 0.1,
+        voltage_duration: int = 20,
+        compliance: float = 0.001,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         """Hold a list of steady voltages and record the current over time
         (constant-voltage stress / retention).
 
@@ -1629,27 +1563,9 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Measure voltage steady state '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_voltage_steady.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        with open(file_parameters, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                param_name = row['Parameter']
-                param_value = row['Value'].strip()
-                # Use ast.literal_eval to convert string to Python literal if possible
-                # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                try:
-                    param_value = ast.literal_eval(param_value)
-                except (SyntaxError, ValueError):
-                    # If it's not a literal (e.g., a normal string), keep it as a string
-                    pass
-                parameters[param_name] = param_value
-                #print(param_value)
-        # Create variables in the global namespace
-        for p_name, p_value in parameters.items():
-            globals()[p_name] = p_value
+        if pulse_voltages is None:
+            pulse_voltages = [0]
+        parameters = {"pulse_voltages": pulse_voltages, "trigger_period": trigger_period, "voltage_duration": voltage_duration, "compliance": compliance, "measure_delay_position": measure_delay_position}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -1671,19 +1587,26 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         #Add column for set_voltage
         output_table['set_voltage (V)']= pd.Series(pulse_train)
         
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile_1(output_table, df_parameters, cell_number,'VoltageSteady', "x_time")
-        self.make_graph_IV_1(output_table, cell_number, plot_type="x_time") 
+        df_parameters = self._params_df(parameters)
+        self._savefile_1(output_table, df_parameters, cell_number,'VoltageSteady', "x_time")
+        self._make_graph_IV_1(output_table, cell_number, plot_type="x_time") 
         
     @_measurement_result
-    def Keysight_Voltage_list(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voltage_list(
+        self,
+        cell_number: int,
+        csv_path: str = 'C:\\Users\\AMDM\\Desktop\\test.csv',
+        trigger_period: float = 0.1,
+        compliance: float = 0.001,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
             """Apply an arbitrary voltage list loaded from CSV and record the response.
 
             Args:
@@ -1697,27 +1620,7 @@ class ProbotMeasurement:
                     - ``result``: None.
             """
             print('Measure Current against voltage list input '+str(cell_number))
-            file_parameters = self._param_file('parameter_Keysight_voltage_list.csv')
-
-            # Dictionary to store parameters
-            parameters = {}
-            with open(file_parameters, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    param_name = row['Parameter']
-                    param_value = row['Value'].strip()
-                    # Use ast.literal_eval to convert string to Python literal if possible
-                    # This will convert strings like "[0.02,0.04,0.06]" into a Python list
-                    try:
-                        param_value = ast.literal_eval(param_value)
-                    except (SyntaxError, ValueError):
-                        # If it's not a literal (e.g., a normal string), keep it as a string
-                        pass
-                    parameters[param_name] = param_value
-                    #print(param_value)
-            # Create variables in the global namespace
-            for p_name, p_value in parameters.items():
-                globals()[p_name] = p_value
+            parameters = {"csv_path": csv_path, "trigger_period": trigger_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
             
             voltage_df = pd.read_csv(csv_path)
             pulse_train = voltage_df["voltage_list"].to_numpy(dtype=float)
@@ -1733,18 +1636,18 @@ class ProbotMeasurement:
 
 
             #send pulse and get the output_sting
-            output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+            output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
             #change the output_string to output_table (DF)
-            output_table = self.string_to_dataframe(output_string)
+            output_table = self._string_to_dataframe(output_string)
             #Add column for set_voltage
             output_table['set_voltage (V)']= pd.Series(pulse_train)
             
             #save file, adding parameters to the next rows
-            df_parameters = pd.read_csv(file_parameters)
-            self.savefile_1(output_table, df_parameters, cell_number,'Voltage_list', "x_time")
-            self.make_graph_IV_1(output_table, cell_number, plot_type="x_time") 
+            df_parameters = self._params_df(parameters)
+            self._savefile_1(output_table, df_parameters, cell_number,'Voltage_list', "x_time")
+            self._make_graph_IV_1(output_table, cell_number, plot_type="x_time") 
         
-    def Pot_Dep_Calculation(self,df, cell_number, keyword):
+    def _Pot_Dep_Calculation(self,df, cell_number, keyword):
         """Post-process a potentiation/depression run.
 
         Extracts conductance, separates the potentiation/depression cycles, fits the
@@ -1802,7 +1705,21 @@ class ProbotMeasurement:
             pass        
 
     @_measurement_result
-    def Keysight_Potent_Depress(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Potent_Depress(
+        self,
+        cell_number: int,
+        reset_period: int = 5,
+        write_voltage: float = 1.94,
+        erase_voltage: float = -1.94,
+        pulse_duration: float = 0.16,
+        pulse_no: int = 50,
+        read_voltage: int = 1,
+        read_duration: float = 0.16,
+        cycle_write_erase: int = 10,
+        trigger_period: float = 0.16,
+        measure_delay_position: float = 0.5,
+        compliance: int = 100,
+    ) -> Dict[str, Any]:
         """Potentiation/depression: apply repeated write then erase pulse trains over
         cycles and record the conductance change (synaptic weight update).
 
@@ -1817,34 +1734,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct potentiation and depression cycle for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Potent_Depress.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -1889,12 +1779,12 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         
         # adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
+        df_parameters = self._params_df(parameters)
         #add cell_number to the df_parameters bottom row
         df_parameters = pd.concat([df_parameters, pd.DataFrame({'Parameter':'cell_number','Value':[cell_number]})], ignore_index=True)
         #combine output_table and parameters
@@ -1922,13 +1812,30 @@ class ProbotMeasurement:
         
        
         #Fit the potentiation and depression, also save the file
-        df_output_parameters_fitting = self.Pot_Dep_Calculation(df_output_table_parameters, cell_number, 'PotDep')
+        df_output_parameters_fitting = self._Pot_Dep_Calculation(df_output_table_parameters, cell_number, 'PotDep')
 
         #return df_output_parameters_fitting
 
     
     @_measurement_result
-    def Keysight_Potent_Depress_2(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Potent_Depress_2(
+        self,
+        cell_number: int,
+        reset_period: int = 0,
+        write_voltage: float = 0.5,
+        erase_voltage: float = -0.5,
+        pulse_duration: float = 0.05,
+        pulse_no: int = 50,
+        read_voltage: float = 0.1,
+        read_duration: float = 0.05,
+        cycle_write_erase: int = 3,
+        trigger_period: float = 0.05,
+        measure_delay_position: float = 0.5,
+        compliance: int = 100,
+        t_pulse_to_read: float = 0.2,
+        t_pulse_to_pulse: float = 0.5,
+        wait_voltage: int = 0,
+    ) -> Dict[str, Any]:
         #here the read pulse is only pulse in between 0 V
         #the length of the waiting time = t_pulse_to_read + t_read + t_read_to_pulse
 
@@ -1946,34 +1853,7 @@ class ProbotMeasurement:
                 - ``result``: the fitting-parameters DataFrame ``df_output_parameters_fitting``.
         """
         print('Conduct potentiation and depression cycle for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Potent_Depress_2.csv')
-
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance, "t_pulse_to_read": t_pulse_to_read, "t_pulse_to_pulse": t_pulse_to_pulse, "wait_voltage": wait_voltage}
 
         #make a wave 
         full_pulse_set = np.array([], dtype=float)
@@ -2026,13 +1906,13 @@ class ProbotMeasurement:
 
 
         #send pulse and get the output_sting
-        output_string = self.send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
+        output_string = self._send_pulse_train_to_keysight(compliance, pulse_train_string,trigger_count,trigger_period,measure_delay)
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         
         # adding parameters to the next rows, save it
-        df_parameters = pd.read_csv(file_parameters)
+        df_parameters = self._params_df(parameters)
         #add cell_number to the df_parameters bottom row
         df_parameters = pd.concat([df_parameters, pd.DataFrame({'Parameter':'cell_number','Value':[cell_number]})], ignore_index=True)
         #combine output_table and parameters
@@ -2077,12 +1957,18 @@ class ProbotMeasurement:
         #print('debug 1')
         #Fit the potentiation and depression, also save the file
 
-        df_output_parameters_fitting = self.Pot_Dep_Calculation(df_output_table_parameters, cell_number, 'PotDep')
+        df_output_parameters_fitting = self._Pot_Dep_Calculation(df_output_table_parameters, cell_number, 'PotDep')
 
         return df_output_parameters_fitting
     
     @_measurement_result
-    def Keysight_HT_PotDep(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_HT_PotDep(
+        self,
+        cell_number: int,
+        initial_parameters_path: str = None,
+        bo_campaigns: int = 5,
+        inter_measurement_delay: float = 60,
+    ) -> Dict[str, Any]:
         #################
         #initial sampling
         #################
@@ -2097,21 +1983,32 @@ class ProbotMeasurement:
         iteration. Requires the ``analysis`` extra (torch/botorch).
 
         Args:
-            cell_number: 1-based cell index, used in the saved file name(s).
-                Measurement settings are read from ``parameter_Keysight_Potent_Depress_2.csv and initial_parameters.csv``
-                (columns ``Parameter, Value``).
+            cell_number: 1-based cell index.
+            initial_parameters_path: LHS sweep-spec CSV (columns V_write, t_write,
+                t_pulse_to_pulse). Defaults to ``initial_parameters.csv`` in the
+                parameter directory.
+            bo_campaigns: number of Bayesian-optimization iterations. Default 5.
+            inter_measurement_delay: seconds to wait before each measurement.
+                Default 60.
+
+        Note:
+            The BO loop drives the (now argument-based) ``Keysight_Potent_Depress_2``
+            by rewriting ``parameter_Keysight_Potent_Depress_2.csv`` and reading it
+            back as keyword arguments, preserving the CSV interchange used by
+            :mod:`analysis.ht_potdep`.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-                - ``outputs``: one record per saved file; each ``data`` holds no files saved by this routine.
-                - ``result``: None.
+            Dict[str, Any]: standard measurement envelope; ``outputs`` is empty and
+                ``result`` is None (per-cycle data is saved by the inner runs).
         """
-        df_initial_parameters = pd.read_csv(self._param_file('initial_parameters.csv'))
+        if initial_parameters_path is None:
+            initial_parameters_path = self._param_file('initial_parameters.csv')
+        df_initial_parameters = pd.read_csv(initial_parameters_path)
 
         print("--Start innitial sampling--")
         #for each parameter set, rewrite the setting in the parameter_Keysioght_Potent_Depress.csv
         for i in range(len(df_initial_parameters)):
-            time.sleep(60) #wait for 5 minutes
+            time.sleep(inter_measurement_delay)
             df_pot_dep_param = pd.read_csv(self._param_file('parameter_Keysight_Potent_Depress_2.csv'))
             df_pot_dep_param.at[1, 'Value'] = df_initial_parameters.at[i, 'V_write'] #write_voltage
             df_pot_dep_param.at[2, 'Value'] = -1*(df_initial_parameters.at[i, 'V_write']) #erase_voltage
@@ -2123,7 +2020,9 @@ class ProbotMeasurement:
             df_pot_dep_param.to_csv(self._param_file('parameter_Keysight_Potent_Depress_2.csv'), index=False)
 
             #conduct potentiation and depression cycle, get the df_output_parameters_fitting
-            df_output_parameters_fitting = self.Keysight_Potent_Depress_2(cell_number)
+            #(read the just-written CSV back as kwargs; take the fitting df from the envelope)
+            df_output_parameters_fitting = self.Keysight_Potent_Depress_2(
+                cell_number, **self._read_params('parameter_Keysight_Potent_Depress_2.csv'))["result"]
 
             #make df_results_summary and save it 
             self._htpd().make_results_summary(df_output_parameters_fitting)
@@ -2139,14 +2038,16 @@ class ProbotMeasurement:
         # BO run code below
         ##############
        
-        campaign = 5 #number of iteration campaign
+        campaign = bo_campaigns #number of iteration campaign
         print("--Start BO sampling. Total campaign = "+str(campaign))
         for i in range(campaign):
-            time.sleep(60)
+            time.sleep(inter_measurement_delay)
             self._htpd().main_BO(cell_number)
 
             #conduct potentiation and depression cycle, get the df_output_parameters_fitting
-            df_output_parameters_fitting = self.Keysight_Potent_Depress_2(cell_number)
+            #(read the just-written CSV back as kwargs; take the fitting df from the envelope)
+            df_output_parameters_fitting = self.Keysight_Potent_Depress_2(
+                cell_number, **self._read_params('parameter_Keysight_Potent_Depress_2.csv'))["result"]
 
             #make df_results_summary and save it 
             self._htpd().make_results_summary(df_output_parameters_fitting)
@@ -2154,7 +2055,18 @@ class ProbotMeasurement:
         
     
     @_measurement_result
-    def Keysight_Voc_decay(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voc_decay(
+        self,
+        cell_number: int,
+        trigger_period: float = 0.1,
+        light_intensity: int = 50,
+        light_on_duration: int = 5,
+        light_off_duration: int = 10,
+        on_off_cycles: int = 1,
+        source_current: int = 0,
+        compliance_voltage: int = 1,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         #this function is to measure the voc decay with light on/off
         #the light pulse is done with pico
         #here the read pulse is only pulse in between 0 V
@@ -2174,41 +2086,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Voc_decay.csv')
-        
-        #conduct light soaking
-        #self.pico_instrument.light_on()
-        #print('conduct light soaking for 5 minutes')
-        #time.sleep(60*5)
-        #self.pico_instrument.light_off()
-        
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position}
 
         #make a wave
         full_on_off_pulses = np.array([], dtype=float) #initialize full on off pulses
@@ -2285,11 +2163,11 @@ class ProbotMeasurement:
             output_string = 'NONE'
              
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'Voc_decay')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'Voc_decay')
 
 
         ## make a graph
@@ -2313,7 +2191,23 @@ class ProbotMeasurement:
 
 
     @_measurement_result
-    def Keysight_Voc_profile(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voc_profile(
+        self,
+        cell_number: int,
+        trigger_period: float = 0.1,
+        light_intensity: int = 6,
+        wait_time: int = 2,
+        light_on_duration: int = 10,
+        light_off_duration: int = 60,
+        on_off_cycles: int = 1,
+        read_time: int = 0,
+        source_current: int = 0,
+        compliance_voltage: int = 1,
+        measure_delay_position: float = 0.5,
+        NPLC_value: float = 0.01,
+        volt_sense_range: int = 2,
+        curr_sense_range: float = 1e-07,
+    ) -> Dict[str, Any]:
         #this function is to measure the voc decay with light on/off
         #the light pulse is done with pico
 
@@ -2331,40 +2225,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Voc_profile.csv')
-        
-        #conduct light soaking
-        #self.pico_instrument.light_on()
-        #print('conduct light soaking for 5 minutes')
-        #time.sleep(60*5)
-        #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position, "NPLC_value": NPLC_value, "volt_sense_range": volt_sense_range, "curr_sense_range": curr_sense_range}
 
         #make a light pulse train with wait time before the pulses
         pre_exposure_time = np.full(int(wait_time/trigger_period), source_current, dtype=float)
@@ -2451,15 +2312,28 @@ class ProbotMeasurement:
             output_string = 'NONE'
 
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile_1(output_table, df_parameters, cell_number,'Voc_profile', "x_time")
-        self.make_graph_IV_1(output_table, cell_number, plot_type="x_time")
+        df_parameters = self._params_df(parameters)
+        self._savefile_1(output_table, df_parameters, cell_number,'Voc_profile', "x_time")
+        self._make_graph_IV_1(output_table, cell_number, plot_type="x_time")
 
     @_measurement_result
-    def Keysight_Jsc_profile(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Jsc_profile(
+        self,
+        cell_number: int,
+        trigger_period: float = 0.1,
+        light_intensity: int = 10,
+        wait_time: int = 1,
+        light_on_duration: int = 5,
+        light_off_duration: int = 5,
+        on_off_cycles: int = 1,
+        read_time: int = 5,
+        source_voltage: int = 0,
+        compliance_current: float = 0.001,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         #this function is to measure the voc decay with light on/off
         #the light pulse is done with pico
 
@@ -2476,40 +2350,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct Jsc rise and decay measurement for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Jsc_profile.csv')
-        
-        #conduct light soaking
-        #self.pico_instrument.light_on()
-        #print('conduct light soaking for 5 minutes')
-        #time.sleep(60*5)
-        #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_voltage": source_voltage, "compliance_current": compliance_current, "measure_delay_position": measure_delay_position}
 
         #make a light pulse train with wait time before the pulses
         pre_exposure_time = np.full(int(wait_time/trigger_period), source_voltage, dtype=float)
@@ -2589,16 +2430,36 @@ class ProbotMeasurement:
             output_string = 'NONE'
 
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile_1(output_table, df_parameters, cell_number,'Jsc_profile', "x_time")
-        self.make_graph_IV_1(output_table, cell_number, plot_type="x_time")
+        df_parameters = self._params_df(parameters)
+        self._savefile_1(output_table, df_parameters, cell_number,'Jsc_profile', "x_time")
+        self._make_graph_IV_1(output_table, cell_number, plot_type="x_time")
 
    
     @_measurement_result
-    def Keysight_Voc_decay_indiv_soaking(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voc_decay_indiv_soaking(
+        self,
+        cell_number: int,
+        trigger_period: float = 0.1,
+        light_intensity: int = 100,
+        light_off_duration1: int = 1,
+        light_on1: int = 1,
+        light_off_duration2: int = 1,
+        light_on2: int = 1,
+        light_off_duration3: int = 1,
+        light_on3: int = 1,
+        light_off_duration4: int = 1,
+        light_on4: int = 1,
+        light_off_duration5: int = 1,
+        light_on5: int = 1,
+        on_off_cycles: int = 1,
+        source_current: int = 0,
+        compliance: int = 2,
+        measure_delay_position: float = 0.5,
+        soaking_time: int = 0,
+    ) -> Dict[str, Any]:
         #this function is to measure the voc decay with light on/off
         #the light pulse is done with pico
                 #here the read pulse is only pulse in between 0 V
@@ -2617,40 +2478,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Voc_decay_indiv_soaking.csv')
-        
-        #conduct light soaking
-        #self.pico_instrument.light_on()
-        #print('conduct light soaking for 5 minutes')
-        #time.sleep(60*5)
-        #self.pico_instrument.light_off()
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance": compliance, "measure_delay_position": measure_delay_position, "soaking_time": soaking_time}
 
         #make a wave
         full_on_off_pulses = np.array([], dtype=float) #initialize full on off pulses
@@ -2751,11 +2579,11 @@ class ProbotMeasurement:
             output_string = 'NONE'
 
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile(output_table, df_parameters, cell_number,'Voc_decay_indiv_soaking')
+        df_parameters = self._params_df(parameters)
+        self._savefile(output_table, df_parameters, cell_number,'Voc_decay_indiv_soaking')
 
 
         ## make a graph
@@ -2778,7 +2606,27 @@ class ProbotMeasurement:
             pass 
 
     @_measurement_result
-    def Keysight_Voc_decay_ON_OFF_Variation(self, cell_number: int) -> Dict[str, Any]:
+    def Keysight_Voc_decay_ON_OFF_Variation(
+        self,
+        cell_number: int,
+        trigger_period: float = 0.01,
+        light_intensity: int = 10,
+        wait_time: float = 0.5,
+        light_off_duration1: float = 0.1,
+        light_on1: int = 2,
+        light_off_duration2: int = 5,
+        light_on2: int = 0,
+        light_off_duration3: int = 0,
+        light_on3: int = 0,
+        light_off_duration4: int = 0,
+        light_on4: int = 0,
+        light_off_duration5: int = 0,
+        light_on5: int = 0,
+        on_off_cycles: int = 2,
+        source_current: int = 0,
+        voltage_compliance: int = 1,
+        measure_delay_position: float = 0.5,
+    ) -> Dict[str, Any]:
         # this program is used to measure the impact of varying light soaking time as light pulse on Voc
         """Voc decay with variable light on/off durations per cycle.
 
@@ -2793,34 +2641,7 @@ class ProbotMeasurement:
                 - ``result``: None.
         """
         print('Conduct Voc rise and decay measurement under varying light pulse for cell '+str(cell_number))
-        file_parameters = self._param_file('parameter_Keysight_Voc_decay_ON_OFF_Variation.csv')
-        
-        # Dictionary to store parameters
-        parameters = {}
-        # Read the measurement parameters CSV file
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)  # Skip the header row
-            for rows in reader:
-                #skip empty rows
-                if not rows or len(rows)<2:
-                    continue
-                key = rows[0].strip()
-                value = rows[1].strip()
-                # Convert value to float or int if possible
-                try:
-                    #attempt to convert to float first
-                    value = float(value)
-                    #if the float is an integer, then change to integer
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-                parameters[key] = value
-    
-        # Assign variables dynamically
-        for key, value in parameters.items():
-            globals()[key] = value
+        parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "voltage_compliance": voltage_compliance, "measure_delay_position": measure_delay_position}
     
         #design of current signals for the waveform
         pre_exposure_pulse = np.full(int(wait_time/trigger_period), source_current, dtype=float)
@@ -2913,60 +2734,33 @@ class ProbotMeasurement:
             output_string = 'NONE'
     
         #change the output_string to output_table (DF)
-        output_table = self.string_to_dataframe(output_string)
+        output_table = self._string_to_dataframe(output_string)
         print("output_table from SMU acquired")
         #save file, adding parameters to the next rows
-        df_parameters = pd.read_csv(file_parameters)
-        self.savefile_1(output_table, df_parameters, cell_number,'Light_ON_OFF_Variation',"x_time")
+        df_parameters = self._params_df(parameters)
+        self._savefile_1(output_table, df_parameters, cell_number,'Light_ON_OFF_Variation',"x_time")
     
-        self.make_graph_IV_1(output_table, cell_number, plot_type="x_time")
+        self._make_graph_IV_1(output_table, cell_number, plot_type="x_time")
               
     @_measurement_result
-    def Keysight_Time_Gap(self, value: int = None) -> Dict[str, Any]:
-        
+    def Keysight_Time_Gap(
+        self,
+        value: int = None,
+        sleep: float = 60,
+    ) -> Dict[str, Any]:
         """Idle / wait step used to insert delays into a measurement queue.
-
-        Sleeps for the ``sleep`` seconds defined in ``parameter_Keysight_Time_Gap.csv``.
 
         Args:
             value: unused; present so the queue can call it with the common
                 ``(cell_number)`` signature.
+            sleep: seconds to wait. Default 60.
 
         Returns:
             Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`);
                 ``outputs`` is empty and ``result`` is ``None``.
         """
-        file_parameters = self._param_file('parameter_Keysight_Time_Gap.csv')
-    
-        parameters = {}
-    
-        with open(file_parameters, mode='r') as infile:
-            reader = csv.reader(infile)
-            next(reader)
-    
-            for rows in reader:
-                if not rows or len(rows) < 2:
-                    continue
-    
-                key = rows[0].strip()
-                value = rows[1].strip()
-    
-                try:
-                    value = float(value)
-                    if value.is_integer():
-                        value = int(value)
-                except ValueError:
-                    pass
-    
-                parameters[key] = value
-    
-        if "sleep" in parameters: 
-            sleep_time = parameters["sleep"]
-        else: 
-            sleep_time = 0
-    
-        print(f"Sleeping for {sleep_time} seconds...")
-        time.sleep(sleep_time)
+        print(f"Sleeping for {sleep} seconds...")
+        time.sleep(sleep)
 
 
 MeasurementProbot = ProbotMeasurement

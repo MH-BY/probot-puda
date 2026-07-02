@@ -212,37 +212,31 @@ probot_orchestrator.run_scan(
 )
 check("custom mode skips auto return-to-safe", "safe" not in [e[0] for e in fstage3.events])
 
-# built-in dispatch path (machine-based), with parameter writing
-import tempfile
-import csv as _csv
-
-tmp = Path(tempfile.mkdtemp())
-
-
+# built-in dispatch path (machine-based): params passed as kwargs, not CSV
 class FakeMachine:
     def __init__(self):
-        self.called = []
+        self.calls = []
 
-    def _param_file(self, name):
-        return str(tmp / name)
-
-    def Keysight_JV_PV(self, cell):
-        self.called.append(cell)
-        return {"cell": cell}
+    def Keysight_JV_PV(self, cell, **kwargs):
+        self.calls.append((cell, kwargs))
+        return {"cell": cell, **kwargs}
 
 
 machine = FakeMachine()
 fstage4 = FakeStage()
 probot_orchestrator.run_scan(
     machine, fstage4,
-    [{"measurement": "Keysight_JV_PV", "params": {"v_max": 1.0, "compliance": 100}}],
+    [{"measurement": "Keysight_JV_PV",
+      "params": {"v_max": "1.2", "no_cycles": "5.0", "compliance": 100}}],
     cells=[5], num_loops=1, mode="regular",
 )
-check("built-in dispatch called machine method", machine.called == [5])
-written = tmp / "parameter_Keysight_JV_PV.csv"
-check("params written to CSV", written.exists())
-rows = list(_csv.reader(open(written)))
-check("param CSV header + rows", rows[0] == ["Parameter", "Value"] and ["v_max", "1.0"] in rows)
+cell, kw = machine.calls[0]
+check("built-in dispatch passes cell number", cell == 5)
+# str->literal, integer-valued float ("5.0") normalised to int, ints kept
+check("params coerced to typed kwargs", kw == {"v_max": 1.2, "no_cycles": 5, "compliance": 100})
+
+# _params_to_kwargs handles a Parameter/Value mapping and None
+check("empty params -> no kwargs", probot_orchestrator._params_to_kwargs(None) == {})
 
 
 # --------------------------------------------------------------------------
@@ -294,6 +288,25 @@ check("measurement annotated -> Dict[str, Any]",
       inspect.signature(jvpv).return_annotation == Dict[str, Any])
 check("measurement cell_number annotated int",
       inspect.signature(jvpv).parameters["cell_number"].annotation is int)
+
+# measurements now take their settings as typed kwargs WITH DEFAULTS (from the CSVs)
+sig = inspect.signature(jvpv)
+for p in ("v_min", "v_max", "volt_step", "compliance", "scan_rate", "cell_area", "no_cycles"):
+    check(f"JV_PV param present: {p}", p in sig.parameters)
+check("JV_PV params have defaults (callable with just cell_number)",
+      all(pp.default is not inspect._empty
+          for n, pp in sig.parameters.items() if n not in ("self", "cell_number")))
+ap_sig = inspect.signature(SMUKeysightProbotMachine.Keysight_analog_pulse)
+check("integer-count default normalised to int (analog_pulse.no_of_pulses)",
+      isinstance(ap_sig.parameters["no_of_pulses"].default, int)
+      and ap_sig.parameters["no_of_pulses"].default == 5)
+
+# SCPI/data/save/plot helpers are PRIVATE -> not part of the PUDA primitive surface
+print("8. helpers hidden from primitive surface")
+for h in ("make_voltage_pulses", "send_pulse_train_to_keysight", "string_to_dataframe",
+          "savefile", "savefile_1", "make_graph", "make_graph_IV", "Pot_Dep_Calculation"):
+    check(f"helper not public: {h}", getattr(smu, h, None) is None)
+    check(f"private helper present: _{h}", callable(getattr(smu, "_" + h, None)))
 
 
 # --------------------------------------------------------------------------
