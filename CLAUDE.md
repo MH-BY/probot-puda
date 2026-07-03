@@ -49,9 +49,9 @@ probot-puda/
 │       │                           #   composes SMU+light AND defines all 22 Keysight_* measurements
 │       │                           #   directly on the class (see decision 3)
 │       ├── probot_orchestrator.py  # run_scan() — the shared cell-scan loop
-│       ├── analysis/ht_potdep.py   # Bayesian-opt fitting (torch/botorch; lazy import)
-│       ├── analysis/pv_param.py    # PV J-V parameter extraction
 │       └── parameters/*.csv        # packaged default measurement parameters
+├── skills-reference/           # analysis code (pv_param, ht_potdep) for Hermes agent skills
+│                               #   (NOT imported by the edge)
 ├── probot-smu-keysight/        # edge 1 (main.py + ViPSA scaffold + working Parameters/)
 ├── probot-stage/               # edge 2 (main.py + ViPSA scaffold)
 └── gui/                        # keysight.py / pico.py / probebot.py shims + main_tkinter.py + Parameters/
@@ -83,9 +83,9 @@ probot-puda/
    PUDA / an AI recipe can call e.g. `Keysight_JV_PV(cell_number=1, v_max=1.2)`
    directly. The measurement **bodies are otherwise the original
    `../probot-source/keysight.py` logic** (CSV-read preamble removed, `df_parameters`
-   for saving rebuilt from the args via `_params_df`) — **still save CSVs + plots**
-   and return the Dict envelope. Preserve the body logic; only the parameter
-   interface changed.
+   for saving rebuilt from the args via `_params_df`). Commands are pure instrument
+   I/O: they **save the raw sweep to CSV and return the Dict envelope**, but do
+   **no analysis and no plotting** (see decision 4b). Preserve the sweep logic.
 
 4. **PUDA exposes only PUBLIC methods DEFINED DIRECTLY on the machine class** —
    it does NOT reflect inherited methods (per docs.puda.co: *"Only methods defined
@@ -100,6 +100,17 @@ probot-puda/
    `measurement_list()` name is in `SMUKeysightProbotMachine.__dict__`). The
    composed sub-drivers (`SMUKeysightProbot`, `PicoProbot`) are held as attributes,
    which is fine — only the machine's own methods are commands.
+
+4b. **Analysis + plotting are agent-side, NOT in the machine commands** (per the
+   platform owner). A PUDA command is pure instrument I/O: run the sweep, save the
+   raw CSV, return the raw-data envelope. No `print`, no `matplotlib`, no PV-param
+   extraction / pot-dep fitting / Bayesian optimization inside a command. That code
+   now lives in `../skills-reference/` (`pv_param.py`, `ht_potdep.py`) as a reference
+   for **Hermes agent skills** operating on the returned raw data. The
+   `Keysight_HT_PotDep` command was removed for this reason (it was an
+   analysis/optimization loop). The **GUI** does its own local plotting
+   (`gui/plotting.py`) from the returned envelope. Don't reintroduce analysis or
+   plotting into a command.
 
 5. **`self.smu` is the raw PyVISA resource; `self.pico_instrument` aliases the
    light.** `SMUKeysightProbotMachine` exposes `smu` as a `@property` returning
@@ -116,9 +127,9 @@ probot-puda/
 
 7. **Lazy package `__init__` (PEP 562) + dependency extras.** Importing
    `probot_drivers` pulls nothing heavy; names load on access. Deps are split into
-   extras: `stage` (pyserial, controllably), `smu` (pyvisa, g2vpico, numpy, pandas,
-   scipy, matplotlib), `analysis` (torch, botorch, gpytorch, seaborn). The stage
-   edge depends on `probot-drivers[stage]` only, so it stays lean.
+   extras: `stage` (pyserial, controllably) and `smu` (pyvisa, g2vpico, numpy,
+   pandas, scipy). No matplotlib/torch — plotting is a GUI concern and analysis is
+   agent-side. The stage edge depends on `probot-drivers[stage]` only, so it stays lean.
 
 8. **Measurements return a uniform `Dict[str, Any]` envelope** via the
    `_measurement_result` decorator (in `probot_machine_smu.py`) — `{measurement,
@@ -136,8 +147,8 @@ probot-puda/
    `run_one_measurement` and the GUI's `execute_measurement` call
    `machine.<measurement>(cell_number, **kwargs)` (no CSV writing).
 
-10. **Configurable, writable `param_dir`/`data_dir`.** `Keysight_HT_PotDep` and the
-   GUI **rewrite** parameter CSVs at runtime, so the parameter dir must be writable.
+10. **Configurable, writable `param_dir`/`data_dir`.** The GUI may rewrite parameter
+   CSVs, so the parameter dir must be writable.
    Resolved via constructor args / `PROBOT_PARAM_DIR` / `PROBOT_DATA_DIR`, default
    to the packaged `parameters/` and `./Data/Keysight`. `_param_file` has a
    **case-insensitive fallback** (the source mixes `Voltage_Steady` vs

@@ -15,6 +15,7 @@ import copy
 
 # Shared cell-scan orchestration (used by BOTH this GUI and the PUDA edge service).
 from probot_drivers import probot_orchestrator
+import plotting
 
 # Initialize ProbeBot
 probe_bot = ProbeBot()
@@ -985,7 +986,9 @@ class App:
                 self.print_to_output(f"Error: Measurement function not found")
                 return
 
-            measurement_function(cell_number, **kwargs)
+            # Commands return raw data (no plotting); plot it locally in the GUI.
+            envelope = measurement_function(cell_number, **kwargs)
+            plotting.plot_envelope(envelope)
 
         except Exception as e:
             self.print_to_output(f"    Error executing measurement: {e}")
@@ -1009,7 +1012,9 @@ class App:
 
             # Pass the currently-loaded parameters as keyword arguments.
             kwargs = probot_orchestrator._params_to_kwargs(getattr(self, 'parameters', None))
-            measurement_function(cell_number, **kwargs)
+            # Commands return raw data (no plotting); plot it locally in the GUI.
+            envelope = measurement_function(cell_number, **kwargs)
+            plotting.plot_envelope(envelope)
 
         except Exception as e:
             self.print_to_output(f"Error executing measurement: {e}")

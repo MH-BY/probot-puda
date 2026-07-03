@@ -5,10 +5,9 @@ description = "Tkinter GUI for the probot platform, running on the shared probot
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 # The GUI talks to both machines in-process, so it needs both driver extras
-# (pandas comes in via the smu extra). Add the analysis extra to run Keysight_HT_PotDep.
+# (pandas comes in via the smu extra). matplotlib is a GUI concern now: the machine
+# commands return raw data and the GUI plots it locally (analysis is agent-side).
 dependencies = [
     "probot-drivers[smu,stage]",
+    "matplotlib>=3.8",
 ]
-
-[project.optional-dependencies]
-analysis = ["probot-drivers[smu,stage,analysis]"]

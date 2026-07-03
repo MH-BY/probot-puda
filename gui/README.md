@@ -15,7 +15,7 @@ shims that preserve the GUI's original plugin contract while delegating to
 ## Run
 
 ```bash
-uv sync                       # add --extra analysis for Keysight_HT_PotDep
+uv sync
 uv run python main_tkinter.py
 ```
 

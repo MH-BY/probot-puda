@@ -321,12 +321,24 @@ check("integer-count default normalised to int (analog_pulse.no_of_pulses)",
       isinstance(ap_sig.parameters["no_of_pulses"].default, int)
       and ap_sig.parameters["no_of_pulses"].default == 5)
 
-# SCPI/data/save/plot helpers are PRIVATE -> not part of the PUDA primitive surface
+# SCPI/data/save helpers are PRIVATE -> not part of the PUDA primitive surface
 print("8. helpers hidden from primitive surface")
 for h in ("make_voltage_pulses", "send_pulse_train_to_keysight", "string_to_dataframe",
-          "savefile", "savefile_1", "make_graph", "make_graph_IV", "Pot_Dep_Calculation"):
+          "savefile", "savefile_1"):
     check(f"helper not public: {h}", getattr(smu, h, None) is None)
     check(f"private helper present: _{h}", callable(getattr(smu, "_" + h, None)))
+
+# analysis + plotting are removed from the machine (they become agent skills)
+for gone in ("make_graph", "make_graph_IV", "make_graph_IV_1", "Pot_Dep_Calculation",
+             "_make_graph", "_make_graph_IV", "_make_graph_IV_1", "_Pot_Dep_Calculation",
+             "_htpd", "PV_calc"):
+    check(f"analysis/plotting removed from machine: {gone}", getattr(smu, gone, None) is None)
+check("Keysight_HT_PotDep (analysis) removed from commands",
+      "Keysight_HT_PotDep" not in measurement_list()
+      and not hasattr(SMUKeysightProbotMachine, "Keysight_HT_PotDep"))
+import probot_drivers.probot_machine_smu as _pm
+check("machine module does not import matplotlib/pv_param",
+      not hasattr(_pm, "plt") and not hasattr(_pm, "PV_calc"))
 
 
 # --------------------------------------------------------------------------

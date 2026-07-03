@@ -31,7 +31,7 @@ the repo on any OS — the drivers are import-safe without hardware.
 # per edge:
 cd probot-smu-keysight   # or probot-stage
 cp .env.example .env      # edit MACHINE_ID, NATS_SERVERS, addresses
-uv sync                   # smu edge: add --extra analysis for Keysight_HT_PotDep
+uv sync
 uv run python main.py
 # ...or launch both at once from the workspace root:
 start_all_edges.bat
