@@ -6,14 +6,16 @@ there is a single source of truth for hardware control.
 
 ## Components
 
-| Module | Class | Hardware |
+| Module | Class | Role |
 |---|---|---|
-| `probot_smu_keysight` | `SMUKeysightProbot` | Keysight SMU (PyVISA / SCPI) |
-| `probot_pico` | `PicoProbot` | Pico G2V LED (Ethernet) |
-| `probot_stage` | `StageProbot` | Ender 3-axis stage (serial) |
-| `probot_measurement` | `ProbotMeasurement` | the ~23 `Keysight_*` measurement routines (mixin) |
+| `probot_smu_keysight` | `SMUKeysightProbot` | Keysight SMU transport (PyVISA / SCPI) — held by the machine |
+| `probot_pico` | `PicoProbot` | Pico G2V LED (Ethernet) — held by the machine |
+| `probot_stage` | `StageProbot` / `ProbotStage` | Ender 3-axis stage — the `probot-stage` edge machine |
+| `probot_machine_smu` | `SMUKeysightProbotMachine` | the `probot-smu-keysight` edge machine: composes SMU + light and defines all 22 `Keysight_*` measurement commands directly on the class |
 | `probot_orchestrator` | `run_scan(...)` | shared cell-scan loop (move → probe → measure → unprobe) |
-| `probot` | `Probot` | composite machine wiring all of the above |
+
+> PUDA exposes only public methods **defined directly** on a machine class, so the
+> measurements live in `SMUKeysightProbotMachine`'s body (not a mixin).
 
 `analysis/ht_potdep.py` (Bayesian optimization, needs the `analysis` extra) and
 `analysis/pv_param.py` (PV parameter extraction) hold the post-processing.

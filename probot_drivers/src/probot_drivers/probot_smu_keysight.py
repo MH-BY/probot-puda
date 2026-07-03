@@ -3,7 +3,7 @@
 Refactor of the connection half of the original ``keysight.py``
 ``KeysightInstrument.__init__``. Responsibilities here are deliberately narrow:
 open / hold / close the PyVISA session. The measurement logic lives in
-:mod:`probot_drivers.probot_measurement` (a mixin on the composite ``Probot``),
+the measurement routines in :mod:`probot_drivers.probot_machine_smu`,
 which reaches the raw resource through this object's :attr:`smu` attribute.
 
 Changes versus the original:

@@ -20,7 +20,7 @@ import os
 import logging
 
 from probot_drivers import SMUKeysightProbotMachine
-from probot_drivers.probot_measurement import measurement_list as _measurement_list
+from probot_drivers import measurement_list as _measurement_list
 
 logger = logging.getLogger(__name__)
 

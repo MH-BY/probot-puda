@@ -28,10 +28,8 @@ _EXPORTS = {
     "StageProbot": "probot_stage",
     "SMUKeysightProbot": "probot_smu_keysight",
     "PicoProbot": "probot_pico",
-    "ProbotMeasurement": "probot_measurement",
-    "MeasurementProbot": "probot_measurement",
-    "measurement_list": "probot_measurement",
-    "MEASUREMENT_NAMES": "probot_measurement",
+    "measurement_list": "probot_machine_smu",
+    "MEASUREMENT_NAMES": "probot_machine_smu",
 }
 
 __all__ = list(_EXPORTS) + ["probot_orchestrator"]

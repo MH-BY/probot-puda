@@ -262,13 +262,19 @@ check("pico.PicoInstrument() constructs", pico.PicoInstrument() is not None)
 print("7. measurement output envelope")
 import inspect
 from typing import Any, Dict
-from probot_drivers.probot_measurement import _measurement_result, ProbotMeasurement
+from probot_drivers.probot_machine_smu import _measurement_result
 
 
-class _Dummy(ProbotMeasurement):
+class _Dummy:
     def __init__(self):
         self._param_dir = "."
         self._data_dir = "."
+
+    def _record_output(self, file_path, keyword, table):
+        rec = {"file": file_path, "keyword": keyword, "data": None}
+        self._outputs = getattr(self, "_outputs", [])
+        self._outputs.append(rec)
+        return rec
 
     @_measurement_result
     def fake(self, cell_number):
@@ -282,12 +288,26 @@ check("envelope cell_number", env["cell_number"] == 7)
 check("envelope records saved outputs",
       env["outputs"] == [{"file": "f.csv", "keyword": "kw", "data": None}])
 
+# CRITICAL (PUDA): every measurement must be defined DIRECTLY on the machine class,
+# because PUDA exposes only own methods, not inherited ones.
+own = set(vars(SMUKeysightProbotMachine))
+missing_own = [n for n in measurement_list() if n not in own]
+check(f"all measurements defined ON the machine class (missing={missing_own})", not missing_own)
+check("measurement __qualname__ belongs to the machine class",
+      SMUKeysightProbotMachine.Keysight_JV_PV.__qualname__.startswith("SMUKeysightProbotMachine"))
+for lc in ("startup", "shutdown", "home", "reset", "get_position", "identify",
+           "measurement_list", "light_on", "light_off"):
+    check(f"lifecycle/command defined on class: {lc}", lc in own)
+
 jvpv = SMUKeysightProbotMachine.Keysight_JV_PV
 check("measurement is decorated (wrapped)", hasattr(jvpv, "__wrapped__"))
+# annotations may be strings (from `from __future__ import annotations`); resolve
+# them the way PUDA does before checking types.
+rsig = inspect.signature(jvpv, eval_str=True)
 check("measurement annotated -> Dict[str, Any]",
-      inspect.signature(jvpv).return_annotation == Dict[str, Any])
+      rsig.return_annotation == Dict[str, Any])
 check("measurement cell_number annotated int",
-      inspect.signature(jvpv).parameters["cell_number"].annotation is int)
+      rsig.parameters["cell_number"].annotation is int)
 
 # measurements now take their settings as typed kwargs WITH DEFAULTS (from the CSVs)
 sig = inspect.signature(jvpv)

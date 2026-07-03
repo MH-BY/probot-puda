@@ -44,9 +44,10 @@ probot-puda/
 │       ├── __init__.py             # LAZY (PEP 562) — importing the package pulls no heavy deps
 │       ├── probot_smu_keysight.py  # SMUKeysightProbot  — raw PyVISA session (transport only)
 │       ├── probot_pico.py          # PicoProbot         — Pico G2V light
-│       ├── probot_stage.py         # StageProbot        — Ender stage (also the stage edge's machine)
-│       ├── probot_measurement.py   # ProbotMeasurement  — the ~22 Keysight_* routines (VERBATIM port)
-│       ├── probot_machine_smu.py   # SMUKeysightProbotMachine — composes SMU+light+measurements
+│       ├── probot_stage.py         # StageProbot/ProbotStage — Ender stage (the stage edge's machine)
+│       ├── probot_machine_smu.py   # SMUKeysightProbotMachine — the smu-keysight machine:
+│       │                           #   composes SMU+light AND defines all 22 Keysight_* measurements
+│       │                           #   directly on the class (see decision 3)
 │       ├── probot_orchestrator.py  # run_scan() — the shared cell-scan loop
 │       ├── analysis/ht_potdep.py   # Bayesian-opt fitting (torch/botorch; lazy import)
 │       ├── analysis/pv_param.py    # PV J-V parameter extraction
@@ -86,11 +87,19 @@ probot-puda/
    and return the Dict envelope. Preserve the body logic; only the parameter
    interface changed.
 
-4. **SCPI/data/save/plot helpers are private** (`_`-prefixed:
-   `_make_voltage_pulses`, `_send_pulse_train_to_keysight`, `_string_to_dataframe`,
-   `_savefile`, `_make_graph*`, `_Pot_Dep_Calculation`), so PUDA reflects only the
-   real measurements + lifecycle + `light_on/off` as primitives — not plumbing.
-   All measurements still live in ONE module (`probot_measurement.py`).
+4. **PUDA exposes only PUBLIC methods DEFINED DIRECTLY on the machine class** —
+   it does NOT reflect inherited methods (per docs.puda.co: *"Only methods defined
+   on this driver wrapper class are exposed to PUDA"*). So all 22 `Keysight_*`
+   measurements are defined **in the `SMUKeysightProbotMachine` class body** (not a
+   mixin/base class) — that's why `probot_machine_smu.py` is one big self-contained
+   class rather than a thin class + a `ProbotMeasurement` mixin. The
+   SCPI/data/save/plot helpers are `_`-prefixed (`_make_voltage_pulses`,
+   `_send_pulse_train_to_keysight`, `_string_to_dataframe`, `_savefile`,
+   `_make_graph*`, `_Pot_Dep_Calculation`) so PUDA does not surface them. **If you
+   add a measurement, define it on this class** (a test in `verify.py` asserts every
+   `measurement_list()` name is in `SMUKeysightProbotMachine.__dict__`). The
+   composed sub-drivers (`SMUKeysightProbot`, `PicoProbot`) are held as attributes,
+   which is fine — only the machine's own methods are commands.
 
 5. **`self.smu` is the raw PyVISA resource; `self.pico_instrument` aliases the
    light.** `SMUKeysightProbotMachine` exposes `smu` as a `@property` returning
@@ -112,7 +121,7 @@ probot-puda/
    edge depends on `probot-drivers[stage]` only, so it stays lean.
 
 8. **Measurements return a uniform `Dict[str, Any]` envelope** via the
-   `_measurement_result` decorator (in `probot_measurement.py`) — `{measurement,
+   `_measurement_result` decorator (in `probot_machine_smu.py`) — `{measurement,
    cell_number, outputs, result}`, where `outputs` is the list of saved-file
    records collected by `_savefile`/`_savefile_1` (`_record_output`). The decorator
    wraps the bodies. Because measurements now return an envelope, any *internal*
