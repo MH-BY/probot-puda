@@ -103,8 +103,8 @@ probot-puda/
    it does NOT reflect inherited methods (per docs.puda.co: *"Only methods defined
    on this driver wrapper class are exposed to PUDA"*). So all 21 `Keysight_*`
    measurements are defined **in the `KeysightPicoProbotMachine` class body** (not a
-   mixin/base class) — that's why `probot_machine_keysight_pico.py` is one big self-contained
-   class rather than a thin class + a `ProbotMeasurement` mixin. The
+   mixin/base class) — that's why the machine class in `driver.py` is one big
+   self-contained class rather than a thin class + a `ProbotMeasurement` mixin. The
    SCPI/data/save helpers are `_`-prefixed (`_make_voltage_pulses`,
    `_send_pulse_train_to_keysight`, `_string_to_dataframe`, `_savefile`) so PUDA does
    not surface them. **If you
@@ -132,8 +132,8 @@ probot-puda/
 
 6. **Connect in `startup()`, never in `__init__`/at import.** Every driver's
    constructor only stores config; hardware libs (`pyvisa`, `g2vpico`,
-   `controllably`) are imported lazily inside `startup()`. This keeps the package
-   importable and unit-testable with **no hardware and no network**. The original
+   `controllably`) are imported lazily inside `startup()`. This keeps each
+   `driver.py` importable and unit-testable with **no hardware and no network**. The original
    `pico.py` connected + called `light_off()` at import — that side effect was
    removed.
 
@@ -155,11 +155,12 @@ probot-puda/
    commands accumulate records across cycles, e.g. `Keysight_JV_PV`). `Keysight_Time_Gap`
    returns a small `dict`.
 
-9. **Orchestrator/GUI pass params as kwargs.** `probot_orchestrator._params_to_kwargs`
-   coerces a params mapping (or a GUI `Parameter/Value` DataFrame) to kwargs,
-   parsing strings and normalising integer-valued floats to `int`; both
-   `run_one_measurement` and the GUI's `execute_measurement` call
-   `machine.<measurement>(cell_number, **kwargs)` (no CSV writing).
+9. **Orchestrator/GUI pass params as kwargs** (now in the **deferred**
+   `gui/probot_orchestrator.py`). `_params_to_kwargs` coerces a params mapping (or a
+   GUI `Parameter/Value` DataFrame) to kwargs, parsing strings and normalising
+   integer-valued floats to `int`; both `run_one_measurement` and the GUI's
+   `execute_measurement` call `machine.<measurement>(cell_number, **kwargs)` (no CSV
+   writing).
 
 10. **Only a writable `data_dir` — no parameter directory.** Because measurements
    take their settings as kwargs (decision 3), the machine never reads
@@ -181,11 +182,11 @@ each waits for the previous to finish because primitives are synchronous):
 
 ```
 for n in 1..15:
-  stage-probot.move_to_cell(cell_number=n)
-  stage-probot.probe()
+  probot-stage.move_to_cell(cell_number=n)
+  probot-stage.probe()
   probot-keysight-pico.Keysight_JV_PV(cell_number=n, v_min=-0.5, v_max=1.0)   # other params default
-  stage-probot.unprobe()                 # runs after the measurement returns
-stage-probot.move_to_safeposition()      # once, at the very end
+  probot-stage.unprobe()                 # runs after the measurement returns
+probot-stage.move_to_safeposition()      # once, at the very end
 ```
 
 Key points that make this reliable and correct:
@@ -204,14 +205,15 @@ Key points that make this reliable and correct:
 
 ## Conventions
 
-- **Naming:** probot-specific drivers carry a `*_probot` suffix (modules/classes)
-  to avoid PUDA namespace collisions with other platforms on the same bus.
-- **GUI shims keep the GUI's required names** (`keysight.py`/`KeysightInstrument`,
-  `pico.py`/`PicoInstrument`, `probebot.py`/`ProbeBot`) and delegate to the
-  `*_probot` drivers, so disambiguation never reaches the GUI. The GUI itself is
-  the original, edited only to call `probot_orchestrator.run_scan` from its two
-  measurement threads (it keeps its own plugin dispatch via the `run_measurement`
-  callback).
+- **Naming:** driver **classes** carry a `Probot` marker (`KeysightPicoProbotMachine`,
+  `KeysightProbot`, `PicoProbot`, `ProbotStage`) to avoid PUDA namespace collisions
+  with other platforms on the same bus. The module is just `driver.py` per edge.
+- **GUI shims** (part of the **deferred** GUI, see `gui/README.md`) keep the GUI's
+  required names (`keysight.py`/`KeysightInstrument`, `pico.py`/`PicoInstrument`,
+  `probebot.py`/`ProbeBot`) and delegate to the drivers; the GUI calls
+  `probot_orchestrator.run_scan` from its two measurement threads (keeping its own
+  plugin dispatch via the `run_measurement` callback). It needs re-wiring to the
+  edges' `driver.py` before it runs again.
 - **Docstrings** follow the `../good-format-example/` style (summary, `Args:` with
   ranges/defaults, `Returns:` with a data schema). New code should match.
 - **Type hints** on signatures, including return annotations.
@@ -263,19 +265,21 @@ plugin-contract checks were dropped when the GUI was deferred.
   Check how `puda==0.0.15`'s `EdgeRunner` dispatches primitives — if on the asyncio
   event loop, wrap measurement calls in `asyncio.to_thread` so telemetry/heartbeat
   keep flowing.
-- **Python pinned `>=3.11,<3.13`** because of torch wheel availability.
+- **Python pinned `>=3.11,<3.13`** — originally for torch wheels; torch is no longer
+  an edge dependency (it lives in `../skills-reference/`), so this pin can likely be
+  relaxed toward ViPSA's 3.14 once the deps are resolved.
 - **Richer light primitives**: only `light_on`/`light_off` are exposed on the SMU
   machine; add `set_light_intensity` / manual `light_pulse` passthroughs if PUDA
   needs them.
 - **Richer `Args:` docs**: per-measurement parameter keys could be filled in from
-  each `parameter_*.csv` (only `Keysight_JV_PV` keys are known/listed so far).
+  the provenance CSVs in `../probot-source/Parameters/` (only `Keysight_JV_PV` keys
+  are listed so far).
 
 ## Gotchas
 
 - **`Keysight_Digital_Retention`** is advertised by `measurement_list()` but the
-  implementation method is named `Keysight_Digital_Endurance` (it reads
-  `parameter_Keysight_Digital_Retention.csv`). A class-level alias in
-  `probot_machine_keysight_pico.py` makes the advertised name resolve. (Pre-existing source
+  implementation method is named `Keysight_Digital_Endurance`. A class-level alias at
+  the bottom of `driver.py` makes the advertised name resolve. (Pre-existing source
   quirk.)
 - **`Keysight_Voltage_list`** in the original source has an over-indented (12-space)
   body — keep its docstring at the same indentation.
