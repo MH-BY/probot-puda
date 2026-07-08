@@ -35,8 +35,7 @@ class Config(BaseSettings):
     # Pico G2V light controller.
     pico_ip: str | None = None
     pico_id: str | None = None
-    # Writable parameter / data directories (defaults inside the machine if unset).
-    param_dir: str | None = None
+    # Writable data directory for saved results (default inside the machine if unset).
     data_dir: str | None = None
 
     model_config = SettingsConfigDict(
@@ -69,7 +68,6 @@ async def main():
         smu_device_no=config.keysight_device_no,
         pico_ip=config.pico_ip,
         pico_id=config.pico_id,
-        param_dir=config.param_dir,
         data_dir=config.data_dir,
     )
     driver.startup()

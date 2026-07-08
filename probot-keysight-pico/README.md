@@ -38,8 +38,9 @@ containers is unreliable; run natively instead.
 ## Notes
 
 - `MPLBACKEND=Agg` is set in the container; export it too when running headless.
-- Parameter defaults live in this edge's `./Parameters` folder (writable); the
-  compose file mounts `./Parameters` and `./Data`.
+- Measurement settings come in as command arguments (with defaults baked into each
+  `Keysight_*` signature); the edge does not read parameter CSVs. Only output data
+  is written — to `./Data` (mounted by the compose file).
 - Measurement primitives are synchronous and can run for many seconds/minutes. If
   the PUDA `EdgeRunner` dispatches on the asyncio loop, wrap calls in
   `asyncio.to_thread` so telemetry keeps flowing.

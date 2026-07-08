@@ -45,7 +45,6 @@ probot-puda/
 │   ├── driver.py               #   KeysightProbot (SMU transport) + PicoProbot (light) +
 │   │                           #   KeysightPicoProbotMachine (composes both; all 21 Keysight_*
 │   │                           #   measurements defined directly on the class — see decision 3)
-│   ├── Parameters/*.csv        #   default measurement parameters (writable; the driver's default dir)
 │   └── Dockerfile, compose.yml, .env.example, start_edge.bat, README.md
 ├── probot-stage/               # EDGE 2 — self-contained
 │   ├── main.py                 #   from driver import ProbotStage
@@ -162,12 +161,14 @@ probot-puda/
    `run_one_measurement` and the GUI's `execute_measurement` call
    `machine.<measurement>(cell_number, **kwargs)` (no CSV writing).
 
-10. **Configurable, writable `param_dir`/`data_dir`.** The GUI may rewrite parameter
-   CSVs, so the parameter dir must be writable.
-   Resolved via constructor args / `PROBOT_PARAM_DIR` / `PROBOT_DATA_DIR`, default
-   to the packaged `parameters/` and `./Data/Keysight`. `_param_file` has a
-   **case-insensitive fallback** (the source mixes `Voltage_Steady` vs
-   `voltage_steady`).
+10. **Only a writable `data_dir` — no parameter directory.** Because measurements
+   take their settings as kwargs (decision 3), the machine never reads
+   `parameter_*.csv` at runtime, so there is **no `param_dir`**. The old
+   `_param_dir`/`_param_file` reader and the edge's `Parameters/` folder were
+   removed. `data_dir` (where results are saved) is resolved via the constructor
+   arg / `PROBOT_DATA_DIR`, default `./Data/Keysight`. The `parameter_*.csv` values
+   survive only as the **defaults baked into each measurement's signature** (their
+   provenance is `../probot-source/Parameters/`).
 
 ## Scan protocol (how PUDA sequences a request)
 

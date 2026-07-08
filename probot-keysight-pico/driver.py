@@ -301,7 +301,6 @@ def measurement_list():
     return list(MEASUREMENT_NAMES)
 
 
-_DEFAULT_PARAM_DIR = os.path.join(os.path.dirname(__file__), "Parameters")
 _DEFAULT_DATA_DIR = os.path.join("Data", "Keysight")
 
 
@@ -316,21 +315,24 @@ class KeysightPicoProbotMachine:
         smu_device_no: int = 0,
         pico_ip: str | None = None,
         pico_id: str | None = None,
-        param_dir: str | None = None,
         data_dir: str | None = None,
     ) -> None:
-        """Wire up the SMU + light sub-controllers (does not connect)."""
+        """Wire up the SMU + light sub-controllers (does not connect).
+
+        Measurement settings arrive as method kwargs (with defaults), so there is no
+        parameter directory to configure - only ``data_dir`` for where results are
+        written.
+        """
         self._smu = KeysightProbot(address=smu_address, device_no=smu_device_no)
         self.light = PicoProbot(ip=pico_ip, device_id=pico_id)
         # Alias expected by the measurement routines.
         self.pico_instrument = self.light
 
-        self._param_dir = param_dir or os.environ.get("PROBOT_PARAM_DIR") or _DEFAULT_PARAM_DIR
         self._data_dir = data_dir or os.environ.get("PROBOT_DATA_DIR") or _DEFAULT_DATA_DIR
 
         logger.info(
-            "KeysightPicoProbotMachine initialised (smu_address=%s, pico_ip=%s, param_dir=%s)",
-            smu_address, pico_ip, self._param_dir,
+            "KeysightPicoProbotMachine initialised (smu_address=%s, pico_ip=%s, data_dir=%s)",
+            smu_address, pico_ip, self._data_dir,
         )
 
     @property
@@ -388,25 +390,6 @@ class KeysightPicoProbotMachine:
         """Turn the Pico light off (0%)."""
         return self.light.light_off()
 
-
-    def _param_file(self, name):
-        """Resolve a parameter CSV inside the configurable parameter directory.
-
-        Falls back to a case-insensitive match (the source uses inconsistent
-        casing, e.g. ``Voltage_Steady`` vs ``voltage_steady``) so the routines
-        work on case-sensitive filesystems too.
-        """
-        path = os.path.join(self._param_dir, name)
-        if os.path.exists(path):
-            return path
-        try:
-            lower = name.lower()
-            for fn in os.listdir(self._param_dir):
-                if fn.lower() == lower:
-                    return os.path.join(self._param_dir, fn)
-        except OSError:
-            pass
-        return path
 
     def _data_path(self, *parts):
         """Return (creating if needed) a data output directory under the data root."""

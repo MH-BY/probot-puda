@@ -8,8 +8,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./.env:/app/probot-keysight-pico/.env:ro
-      # Writable parameter + data directories (params get rewritten at runtime).
-      - ./Parameters:/app/probot-keysight-pico/Parameters
+      # Writable output-data directory.
       - ./Data:/app/probot-keysight-pico/Data
     healthcheck:
       test: ["CMD", "uv", "run", "python", "-c", "import sys; sys.exit(0)"]

@@ -1,8 +1,0 @@
-Parameter,Value
-pulse_voltages,"[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.2,1.4,1.6,1.8,2.0]"
-read_voltage,0.1
-trigger_period,0.02
-pulse_duration,0.5
-rest_period,5
-compliance,100.0
-measure_delay_position,0.5
