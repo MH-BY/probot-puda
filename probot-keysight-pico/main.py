@@ -15,14 +15,14 @@ import psutil
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from puda import EdgeNatsClient, EdgeRunner
 
-from probot_drivers import KeysightPicoProbotMachine
+from driver import KeysightPicoProbotMachine
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     force=True,
 )
-logging.getLogger("probot_drivers").setLevel(logging.WARNING)
+logging.getLogger("driver").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

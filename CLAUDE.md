@@ -12,8 +12,10 @@ Guidance for AI agents (and humans) continuing this work. Read this first.
 - **Pico G2V LED** light source — Ethernet (`g2vpico`)
 - **Ender 3-axis "ProbeBot" stage** — serial COM port (`controllably`)
 
-It runs as **two PUDA edge services** plus the original Tkinter **GUI**, all on a
-single **shared driver library** so there is one source of truth (no fork).
+It runs as **two PUDA edge services** in a **one-folder-per-edge** layout
+(ViPSA-style): each edge is self-contained, with its own `driver.py` and **no
+shared library**. (Earlier the drivers lived in a shared `probot_drivers/`
+package; that was flattened into the edges — see decision 1b.)
 
 The original (pre-PUDA) source lives in a sibling folder `../probot-source/`
 (`keysight.py`, `pico.py`, `probebot.py`, `main_tkinter_6_v3.py`, `HT_PotDep.py`,
@@ -22,39 +24,37 @@ package — consult it when in doubt about original behaviour.
 
 ## Architecture
 
-| Member | Machine id | Hardware | Driver class |
+| Member | Machine id | Hardware | Driver class (in `<edge>/driver.py`) |
 |---|---|---|---|
 | `probot-keysight-pico/` | `probot-keysight-pico` | Keysight SMU + Pico light | `KeysightPicoProbotMachine` |
-| `probot-stage/` | `probot-stage` | Ender 3-axis stage | `StageProbot` |
-| `gui/` | — | both, in-process | uses shims → shared drivers |
-| `probot_drivers/` | — | shared library | (all of the below) |
+| `probot-stage/` | `probot-stage` | Ender 3-axis stage | `ProbotStage` (alias `StageProbot`) |
 
 A PUDA edge service = one process: load `.env` config → build the driver →
 connect to NATS via `puda.EdgeNatsClient` / `EdgeRunner` → PUDA reflects the
 driver's **public methods** as callable **primitives** + publishes telemetry.
-Each `main.py` mirrors `../Vipsa-platform-example/keithley-2450/main.py`.
+Each `main.py` mirrors `../Vipsa-platform-example/keithley-2450/main.py` and
+imports its driver with a sibling `from driver import …` (run from the edge folder).
 
 ```
 probot-puda/
-├── pyproject.toml              # uv workspace: members = probot-keysight-pico, probot-stage, gui, probot_drivers
+├── pyproject.toml              # uv workspace: members = probot-keysight-pico, probot-stage  (that's it)
 ├── start_all_edges.bat         # launches both edges (Windows)
-├── tests/verify.py             # hardware-free verification (run with python tests/verify.py)
-├── probot_drivers/             # SHARED library (installable, src-layout)
-│   └── src/probot_drivers/
-│       ├── __init__.py             # LAZY (PEP 562) — importing the package pulls no heavy deps
-│       ├── probot_keysight.py  # KeysightProbot  — raw PyVISA session (transport only)
-│       ├── probot_pico.py          # PicoProbot         — Pico G2V light
-│       ├── probot_stage.py         # StageProbot/ProbotStage — Ender stage (the stage edge's machine)
-│       ├── probot_machine_keysight_pico.py   # KeysightPicoProbotMachine — the keysight-pico machine:
-│       │                           #   composes SMU+light AND defines all 21 Keysight_* measurements
-│       │                           #   directly on the class (see decision 3)
-│       ├── probot_orchestrator.py  # run_scan() — the shared cell-scan loop
-│       └── parameters/*.csv        # packaged default measurement parameters
+├── tests/verify.py             # hardware-free verification (loads each edge's driver.py by path)
+├── probot-keysight-pico/       # EDGE 1 — self-contained
+│   ├── main.py                 #   from driver import KeysightPicoProbotMachine
+│   ├── driver.py               #   KeysightProbot (SMU transport) + PicoProbot (light) +
+│   │                           #   KeysightPicoProbotMachine (composes both; all 21 Keysight_*
+│   │                           #   measurements defined directly on the class — see decision 3)
+│   ├── Parameters/*.csv        #   default measurement parameters (writable; the driver's default dir)
+│   └── Dockerfile, compose.yml, .env.example, start_edge.bat, README.md
+├── probot-stage/               # EDGE 2 — self-contained
+│   ├── main.py                 #   from driver import ProbotStage
+│   ├── driver.py               #   ProbotStage / StageProbot — Ender stage
+│   └── Dockerfile, compose.yml, .env.example, start_edge.bat, README.md
 ├── skills-reference/           # analysis code (pv_param, ht_potdep) for Hermes agent skills
-│                               #   (NOT imported by the edge)
-├── probot-keysight-pico/        # edge 1 (main.py + ViPSA scaffold + working Parameters/)
-├── probot-stage/               # edge 2 (main.py + ViPSA scaffold)
-└── gui/                        # keysight.py / pico.py / probebot.py shims + main_tkinter.py + Parameters/
+│                               #   (NOT imported by any edge)
+└── gui/                        # DEFERRED Tkinter GUI (shims + main_tkinter.py + probot_orchestrator.py)
+                                #   — imports the removed probot_drivers; needs re-wiring (gui/README.md)
 ```
 
 ## Key design decisions — and WHY (do not undo without reason)
@@ -68,13 +68,24 @@ probot-puda/
    processes would break that timing. The **stage is independent**, so it is its
    own lean edge. (The user explicitly chose this 2-edge split.)
 
+1b. **One folder per edge — no shared library** (ViPSA layout). Each edge's whole
+   driver lives in its own `driver.py` and `main.py` imports it as a sibling
+   (`from driver import …`), run from inside the edge folder. The former shared
+   `probot_drivers/` package was flattened: `KeysightProbot` + `PicoProbot` + the
+   machine now sit together in `probot-keysight-pico/driver.py`, and the stage in
+   `probot-stage/driver.py`. Each edge's `pyproject.toml` lists its device deps
+   directly (no extras). The trade-off the user accepted: the in-process **GUI**
+   lost its shared drivers and is now **deferred** (see the GUI note below /
+   `gui/README.md`). Do not reintroduce a shared library without reason.
+
 2. **A full cell scan spans both edges → PUDA orchestrates it.** No single edge
-   can run a whole scan. `probot_orchestrator.run_scan()` is the **canonical
-   sequence** (per cell: `move_to` → `probe` → run measurement(s) → `unprobe`,
-   with stop/pause control + return-to-safe). The **GUI** uses it in-process (it
-   holds both drivers); a PUDA-side recipe should replicate it by calling
-   `probot-stage` move/probe primitives interleaved with `probot-keysight-pico`
-   measurement primitives.
+   can run a whole scan. The **canonical sequence** is, per cell, `move_to_cell` →
+   `probe` → run measurement(s) → `unprobe`, then `move_to_safeposition` once at
+   the end. A PUDA-side recipe realises it by calling `probot-stage` move/probe
+   primitives interleaved with `probot-keysight-pico` measurement primitives. (The
+   reference implementation `run_scan()` — with stop/pause control + return-to-safe
+   — now lives in `gui/probot_orchestrator.py`, moved there with the deferred GUI
+   that was its only in-process caller.)
 
 3. **Measurements are argument-based primitives** (as of the
    `feat/measurements-as-primitives` work). Each `Keysight_*` measurement takes
@@ -127,11 +138,13 @@ probot-puda/
    `pico.py` connected + called `light_off()` at import — that side effect was
    removed.
 
-7. **Lazy package `__init__` (PEP 562) + dependency extras.** Importing
-   `probot_drivers` pulls nothing heavy; names load on access. Deps are split into
-   extras: `stage` (pyserial, controllably) and `smu` (pyvisa, g2vpico, numpy,
-   pandas, scipy). No matplotlib/torch — plotting is a GUI concern and analysis is
-   agent-side. The stage edge depends on `probot-drivers[stage]` only, so it stays lean.
+7. **Per-edge deps, declared directly (no shared package, no extras).** Each edge's
+   `pyproject.toml` lists exactly what it needs: the stage edge → pyserial +
+   controllably (stays lean); the keysight-pico edge → pyvisa, g2vpico, numpy,
+   pandas, scipy. No matplotlib/torch — plotting is a (deferred) GUI concern and
+   analysis is agent-side. Heavy/hardware libs are still imported **lazily inside
+   `startup()`** (decision 6), so each `driver.py` imports cleanly with no hardware
+   — that is what makes `tests/verify.py` able to load both drivers with stubs.
 
 8. **Measurements RETURN their data as `list[dict]` records** (ViPSA
    `Keithley2450` style — one dict per measured point, keys like `Time (s)`,
@@ -209,37 +222,40 @@ Windows — serial/USB/VISA passthrough is unreliable; Docker is for Linux only)
 You can edit the repo on any OS (drivers are import-safe without hardware).
 
 ```bash
-# per edge (from its folder):
+# per edge (from its folder — the sibling `from driver import …` needs cwd = edge dir):
 cp .env.example .env          # set MACHINE_ID, NATS_SERVERS, KEYSIGHT_ADDRESS, PICO_IP/ID, STAGE_PORT
-uv sync                       # smu edge: add --extra analysis for Keysight_HT_PotDep
+uv sync
 uv run python main.py         # or start_edge.bat ; or start_all_edges.bat at the root
-
-# GUI (from gui/):
-uv sync && uv run python main_tkinter.py
 ```
 
 The SMU edge needs a Windows VISA backend (NI-VISA / Keysight IO Libraries) +
 `g2vpico`; the stage edge needs `controllably` + `pyserial`. Set `MPLBACKEND=Agg`
 when running headless (the measurement routines import `matplotlib.pyplot`).
 
+The Tkinter **GUI** (`gui/`) is **deferred** — it needs re-wiring to import each
+edge's `driver.py` before it will run (see `gui/README.md`).
+
 ## Verify (no hardware / no network needed)
 
 ```bash
-python tests/verify.py     # 49 checks
+python tests/verify.py     # 75 checks
 ```
 
 `tests/verify.py` installs lightweight stubs for the heavy/hardware libs in
-`sys.modules` before importing, then checks import-safety, construction without
-hardware, primitive reflection per edge, the orchestrator's call order / control
-hooks, the GUI plugin contract, and the measurement return contract. It does NOT
-execute real measurement bodies (those need real numpy + hardware).
+`sys.modules`, then **loads each edge's `driver.py` by file path** and checks
+import-safety, construction without hardware, primitive reflection per edge, and
+the measurement return / `_`-helper contract. It does NOT execute real measurement
+bodies (those need real numpy + hardware). The orchestrator call-order and GUI
+plugin-contract checks were dropped when the GUI was deferred.
 
 ## Pending / TODO for future agents
 
 - **`uv lock` + real `uv sync`** were never run here (no network/uv in the build
   env). Run them on a machine with internet. Confirm **`g2vpico`** and
   **`controllably`** resolve on PyPI; if vendored, add them as `path`/`git` deps in
-  `probot_drivers/pyproject.toml`. Then add `--frozen` back to the Dockerfiles.
+  each edge's `pyproject.toml`. Then add `--frozen` back to the Dockerfiles.
+- **Re-wire or retire the GUI** (`gui/`): point its shims at the edges' `driver.py`
+  files, or drop it. It currently imports the removed `probot_drivers`.
 - **Real-hardware test**: measurement bodies and a live NATS run were not exercised.
 - **Blocking primitives**: measurements are synchronous and can run for many
   seconds/minutes (VISA `*OPC?`, `time.sleep`, `smu.timeout` up to ~10000 s).

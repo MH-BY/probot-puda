@@ -4,18 +4,22 @@ PUDA edge service for the probot **Keysight SMU + Pico light**. The light is
 co-located with the SMU (not a separate edge) because several measurements drive
 the light inline during the SMU acquisition with sub-second timing.
 
+The whole edge is one self-contained `driver.py` (Keysight SMU transport + Pico
+light + the `KeysightPicoProbotMachine` that defines every measurement); `main.py`
+imports it with `from driver import KeysightPicoProbotMachine`.
+
 Primitives exposed: the measurement routines (`Keysight_*`), manual light control
 (`light_on` / `light_off`), and `identify`. The stage is a separate edge service
 (`probot-stage`); a full cell scan is orchestrated by PUDA calling the stage and
-SMU primitives in sequence (the reference sequence is
-`probot_drivers.probot_orchestrator.run_scan`).
+SMU primitives in sequence (`move_to_cell` → `probe` → measure → `unprobe`, then
+`move_to_safeposition` once at the end).
 
 ## Setup (native, recommended on the Windows lab PC)
 
 ```bash
 cp .env.example .env
 # edit MACHINE_ID, NATS_SERVERS, KEYSIGHT_ADDRESS, PICO_IP/ID
-uv sync                 # add --extra analysis to enable Keysight_HT_PotDep
+uv sync
 uv run python main.py   # or start_edge.bat
 ```
 
@@ -34,8 +38,8 @@ containers is unreliable; run natively instead.
 ## Notes
 
 - `MPLBACKEND=Agg` is set in the container; export it too when running headless.
-- `PARAM_DIR` must be writable (`Keysight_HT_PotDep` and the GUI rewrite parameter
-  CSVs); the compose file mounts `./Parameters` and `./Data`.
+- Parameter defaults live in this edge's `./Parameters` folder (writable); the
+  compose file mounts `./Parameters` and `./Data`.
 - Measurement primitives are synchronous and can run for many seconds/minutes. If
   the PUDA `EdgeRunner` dispatches on the asyncio loop, wrap calls in
   `asyncio.to_thread` so telemetry keeps flowing.

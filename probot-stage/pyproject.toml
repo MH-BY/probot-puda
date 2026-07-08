@@ -12,5 +12,7 @@ dependencies = [
     "setuptools<81",
     "websocket-client>=1.8.0",
     "psutil>=6.1.1",
-    "probot-drivers[stage]",
+    # Stage device stack, formerly probot-drivers[stage].
+    "pyserial>=3.5",
+    "controllably",     # Ender controller (vendor API)
 ]

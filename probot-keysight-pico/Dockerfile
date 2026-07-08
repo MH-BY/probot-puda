@@ -17,11 +17,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # for reproducible builds; without it uv resolves at build time.
 COPY pyproject.toml ./
 COPY probot-keysight-pico/pyproject.toml probot-keysight-pico/pyproject.toml
-COPY probot_drivers/pyproject.toml probot_drivers/README.md probot_drivers/
 
 RUN uv sync --no-dev --no-install-project --package probot-keysight-pico-edge
 
-COPY probot_drivers/ probot_drivers/
 COPY probot-keysight-pico/ probot-keysight-pico/
 
 WORKDIR /app/probot-keysight-pico
