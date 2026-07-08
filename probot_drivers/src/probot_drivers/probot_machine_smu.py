@@ -35,39 +35,6 @@ from .probot_pico import PicoProbot
 logger = logging.getLogger(__name__)
 
 
-def _measurement_result(fn):
-    """Decorator giving a measurement a uniform ``Dict[str, Any]`` return.
-
-    The measurement bodies were ported verbatim and mostly persist their data to
-    CSV rather than returning it. This wrapper resets the per-run output
-    accumulator, runs the body, and packages a JSON-serialisable result dict
-    without changing the body itself.
-
-    Returns:
-        Dict[str, Any]: result envelope with keys:
-            - ``measurement`` (str): the measurement name.
-            - ``cell_number`` (int): the cell that was measured.
-            - ``outputs`` (list[dict]): one record per saved file, each
-              ``{"file": str, "keyword": str, "data": {column: [values]}}``,
-              collected by the ``_savefile`` /
-              ``_savefile_1`` helpers.
-            - ``result`` (Any): whatever the underlying routine returned (often
-              ``None`` or, for the fitting routines, a results DataFrame).
-    """
-    @functools.wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        self._outputs = []
-        result = fn(self, *args, **kwargs)
-        cell_number = args[0] if args else kwargs.get("cell_number")
-        return {
-            "measurement": fn.__name__,
-            "cell_number": cell_number,
-            "outputs": self._outputs,
-            "result": result,
-        }
-    return wrapper
-
-
 MEASUREMENT_NAMES = [
     'Keysight_Voc_decay_ON_OFF_Variation', 'Keysight_Voc_decay_indiv_soaking',
     'Keysight_Voc_decay', 'Keysight_Potent_Depress_2',
@@ -111,7 +78,6 @@ class SMUKeysightProbotMachine:
 
         self._param_dir = param_dir or os.environ.get("PROBOT_PARAM_DIR") or _DEFAULT_PARAM_DIR
         self._data_dir = data_dir or os.environ.get("PROBOT_DATA_DIR") or _DEFAULT_DATA_DIR
-        self._outputs = []
 
         logger.info(
             "SMUKeysightProbotMachine initialised (smu_address=%s, pico_ip=%s, param_dir=%s)",
@@ -199,30 +165,6 @@ class SMUKeysightProbotMachine:
         os.makedirs(d, exist_ok=True)
         return d
 
-
-    def _record_output(self, file_path, keyword, table) -> Dict[str, Any]:
-        """Record one saved-file payload on the per-run output accumulator.
-
-        Called by :meth:`savefile` / :meth:`savefile_1`. The collected records are
-        returned to the caller by the :func:`_measurement_result` wrapper.
-
-        Args:
-            file_path: path the data was written to.
-            keyword: file-name keyword for this save.
-            table: the saved measurement table (DataFrame).
-
-        Returns:
-            Dict[str, Any]: ``{"file", "keyword", "data"}`` where ``data`` is the
-            table as ``{column: [values]}`` (or ``None`` if it cannot be serialised).
-        """
-        try:
-            data = table.to_dict(orient="list") if hasattr(table, "to_dict") else None
-        except Exception:
-            data = None
-        rec = {"file": file_path, "keyword": keyword, "data": data}
-        self._outputs = getattr(self, "_outputs", [])
-        self._outputs.append(rec)
-        return rec
 
     def _params_df(self, parameters: dict) -> "pd.DataFrame":
         """Build the ``Parameter, Value`` settings DataFrame saved alongside data.
@@ -366,7 +308,7 @@ class SMUKeysightProbotMachine:
             #file_name = "Sample{}.csv".format(sampleid)
             file_path = os.path.join(folder, file_name)
             df.to_csv(file_path, index=False)
-            return self._record_output(file_path, keyword, output_table)
+            return file_path
         except:
             return None
 
@@ -404,14 +346,13 @@ class SMUKeysightProbotMachine:
             base_path = os.path.join(folder, file_name)
             df.to_csv(base_path + ".csv", index=True)
             
-            return self._record_output(base_path + ".csv", keyword, output_table)
+            return base_path + ".csv"
         except Exception as e:
             return None
 
     
 
 
-    @_measurement_result
     def Keysight_analog_pulse(
         self,
         cell_number: int,
@@ -423,7 +364,7 @@ class SMUKeysightProbotMachine:
         read_duration: float = 60.0,
         no_of_pulses: int = 5,
         compliance: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Apply a train of identical read/write voltage pulses and record the current.
 
         Args:
@@ -442,10 +383,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"pulse_voltage": pulse_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "pulse_duration": pulse_duration, "read_duration": read_duration, "no_of_pulses": no_of_pulses, "compliance": compliance}
 
@@ -466,10 +409,10 @@ class SMUKeysightProbotMachine:
         
         #self._savefile(output_table, df_parameters, cell_number,'AnalogPulse')
         self._savefile_1(output_table,df_parameters,cell_number,'VoltagePulse',"x_time")
+        return output_table.to_dict(orient="records")
 
         #plot IV
 
-    @_measurement_result
     def Keysight_Paired_Pulse_Facilitation(
         self,
         cell_number: int,
@@ -481,7 +424,7 @@ class SMUKeysightProbotMachine:
         rest_period: float = 1.0,
         compliance: float = 1.0,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Paired-pulse facilitation (PPF): apply pulse pairs separated by each
         inter-pulse interval in ``delta_t`` and record the response.
 
@@ -501,10 +444,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         if delta_t is None:
             delta_t = [0.6]
@@ -543,10 +488,10 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'PPF')
+        return output_table.to_dict(orient="records")
 
         #make a graph
 
-    @_measurement_result
     def Keysight_Spike_Duration_DP(
         self,
         cell_number: int,
@@ -557,7 +502,7 @@ class SMUKeysightProbotMachine:
         rest_period: float = 5.0,
         compliance: float = 100.0,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Spike-duration-dependent plasticity: sweep the write-pulse duration and
         record the resulting conductance change.
 
@@ -576,10 +521,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         if pulse_durations is None:
             pulse_durations = [0.02, 0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.2, 0.3, 0.4, 0.5, 1]
@@ -615,10 +562,10 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'SDDP')
+        return output_table.to_dict(orient="records")
 
         #make a graph
 
-    @_measurement_result
     def Keysight_Spike_Voltage_DP(
         self,
         cell_number: int,
@@ -629,7 +576,7 @@ class SMUKeysightProbotMachine:
         rest_period: float = 5.0,
         compliance: float = 100.0,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Spike-voltage-dependent plasticity: sweep the write-pulse voltage and
         record the resulting conductance change.
 
@@ -648,10 +595,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         if pulse_voltages is None:
             pulse_voltages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
@@ -687,10 +636,10 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'SVDP')
+        return output_table.to_dict(orient="records")
 
         #make a graph
     
-    @_measurement_result
     def Keysight_Digital_Endurance(
         self,
         cell_number: int,
@@ -703,7 +652,7 @@ class SMUKeysightProbotMachine:
         read_duration: float = 30.0,
         measure_delay_position: float = 0.5,
         compliance: float = 100.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Digital endurance / retention: repeatedly SET/RESET the device and track
         the read current over cycles. (Also exposed as ``Keysight_Digital_Retention``.)
 
@@ -724,10 +673,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"write_voltage": write_voltage, "erase_voltage": erase_voltage, "read_voltage": read_voltage, "trigger_period": trigger_period, "write_duration": write_duration, "erase_duration": erase_duration, "read_duration": read_duration, "measure_delay_position": measure_delay_position, "compliance": compliance}
 
@@ -756,10 +707,10 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'RETENTION')
+        return output_table.to_dict(orient="records")
 
         #make a graph
 
-    @_measurement_result
     def Keysight_Digital_Sweep(
         self,
         cell_number: int,
@@ -770,7 +721,7 @@ class SMUKeysightProbotMachine:
         trigger_period: float = 0.005,
         no_cycles: int = 10,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Digital I-V sweep: SET then RESET voltage sweeps over ``no_cycles``,
         recording the current per cycle.
 
@@ -789,10 +740,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
@@ -852,10 +805,10 @@ class SMUKeysightProbotMachine:
         #adding parameters to the next rows, save it
         df_parameters = self._params_df(parameters)
         self._savefile(df_sweep_total,df_parameters,cell_number,'DigiSweep')
+        return df_sweep_total.to_dict(orient="records")
 
         #plot IV
 
-    @_measurement_result
     def Keysight_Analog_Sweep(
         self,
         cell_number: int,
@@ -866,7 +819,7 @@ class SMUKeysightProbotMachine:
         trigger_period: float = 0.05,
         no_cycles: int = 20,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Analog I-V sweep: continuous SET/RESET voltage sweeps recording the analog
         current response.
 
@@ -885,10 +838,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
@@ -972,10 +927,10 @@ class SMUKeysightProbotMachine:
         #adding parameters to the next rows, save it
         df_parameters = self._params_df(parameters)
         self._savefile(df_sweep_total,df_parameters,cell_number,'AnaSweep')
+        return df_sweep_total.to_dict(orient="records")
 
         #plot IV
 
-    @_measurement_result
     def Keysight_set_reset_sweep(
         self,
         cell_number: int,
@@ -987,7 +942,7 @@ class SMUKeysightProbotMachine:
         compliance: float = 1.0,
         trigger_period: float = 0.1,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Configurable SET/RESET sweep honouring a ``mode`` parameter
         (``'loop'`` / ``'separate'`` / ``'set_only'`` / ``'reset_only'``).
 
@@ -1007,10 +962,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds 'set_Voltage (V)', 'Current (A)', 'Cycle'.
-        - ``result``: the combined sweep DataFrame ``df_sweep_total``.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"set_v_max": set_v_max, "reset_v_min": reset_v_min, "volt_step": volt_step, "no_cycles": no_cycles, "mode": mode, "compliance": compliance, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position}
     
@@ -1095,13 +1052,13 @@ class SMUKeysightProbotMachine:
         #adding parameters to the next rows, save it
         df_parameters = self._params_df(parameters)
         self._savefile_1(df_sweep_total,df_parameters,cell_number,'set-reset_sweep',"IV")
+        return df_sweep_total.to_dict(orient="records")
     
         #plot IV
     
         return df_sweep_total
 
     
-    @_measurement_result
     def Keysight_Substrate_R(
         self,
         cell_number: int,
@@ -1112,7 +1069,7 @@ class SMUKeysightProbotMachine:
         trigger_period: float = 0.1,
         no_cycles: int = 1,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Measure substrate resistance via a small voltage sweep and a linear fit.
 
         Args:
@@ -1130,10 +1087,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"v_max": v_max, "v_min": v_min, "volt_step": volt_step, "compliance": compliance, "trigger_period": trigger_period, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
@@ -1188,6 +1147,7 @@ class SMUKeysightProbotMachine:
 
         df_parameters_calcparam = pd.concat([df_parameters, df_R],axis = 1)
         self._savefile(df_sweep_total,df_parameters_calcparam,cell_number,'SubstR')
+        return df_sweep_total.to_dict(orient="records")
 
  
         # Plot the data points
@@ -1198,7 +1158,6 @@ class SMUKeysightProbotMachine:
 
         # Show the plot
 
-    @_measurement_result
     def Keysight_JV_PV(
         self,
         cell_number: int,
@@ -1211,7 +1170,7 @@ class SMUKeysightProbotMachine:
         irr: float = 1.0,
         no_cycles: int = 1,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Photovoltaic J-V measurement: forward and reverse voltage sweeps per cycle,
         converted to current density. Returns raw sweeps (PV-parameter
         extraction is done agent-side).
@@ -1234,10 +1193,10 @@ class SMUKeysightProbotMachine:
         saved data.
 
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds 'Voltage (V)', 'Current (mA)', 'Current Density (mA/cm2)', 'Cycle' plus the PV
-        parameters (PCE, FF, Voc, Jsc, Rshunt, Rseries) per fwd/rev cycle.
-        - ``result``: None.
+            list[dict]: one record per measured point, with keys ``Time (s)``,
+            ``Voltage (V)``, ``Current (mA)``, ``Current Density (mA/cm2)``,
+            ``Cycle`` and ``Direction`` (``"forward"``/``"reverse"``). Also saved
+            to CSV as a side effect for the local lab workflow.
         """
         parameters = {"v_min": v_min, "v_max": v_max, "volt_step": volt_step, "compliance": compliance, "scan_rate": scan_rate, "cell_area": cell_area, "irr": irr, "no_cycles": no_cycles, "measure_delay_position": measure_delay_position}
 
@@ -1253,8 +1212,8 @@ class SMUKeysightProbotMachine:
         #round it to 2 decimals
         forward_sweep = [np.round(x,decimals=2) for x in forward_sweep]
         reverse_sweep = [np.round(x,decimals=2) for x in reverse_sweep]
-        
-    
+
+        records = []
         for i in range(int(no_cycles)):
             
             #---FORWARD----
@@ -1287,6 +1246,7 @@ class SMUKeysightProbotMachine:
             #----NEED TO ADD CALCULATION OF J-V parameters--
             file_name_tail = 'JV_PV_fwd_cycle'+str(i+1)
             self._savefile(df_data_setting_fwd, pd.DataFrame(), cell_number, file_name_tail)
+            records += df_JV_cooked_fwd.assign(Direction="forward").to_dict(orient="records")
 
 
             #---REVERSE
@@ -1317,6 +1277,9 @@ class SMUKeysightProbotMachine:
 
             file_name_tail = 'JV_PV_rev_cycle'+str(i+1)
             self._savefile(df_data_setting_rev, pd.DataFrame(), cell_number, file_name_tail)
+            records += df_JV_cooked_rev.assign(Direction="reverse").to_dict(orient="records")
+
+        return records
 
 
 
@@ -1393,7 +1356,6 @@ class SMUKeysightProbotMachine:
 
         return output_string
     
-    @_measurement_result
     def Keysight_Light_Pulse(
         self,
         cell_number: int,
@@ -1406,7 +1368,7 @@ class SMUKeysightProbotMachine:
         light_intensity: float = 20.0,
         light_on_duration: float = 1.0,
         light_off_duration: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Apply a voltage pulse train synchronized with Pico light pulses and record
         the optoelectronic response.
 
@@ -1427,10 +1389,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"read_voltage": read_voltage, "trigger_period": trigger_period, "front_rest_duration": front_rest_duration, "read_duration": read_duration, "compliance": compliance, "measure_delay_position": measure_delay_position, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration}
 
@@ -1468,10 +1432,10 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'LightPulse')
+        return output_table.to_dict(orient="records")
 
         #make a graph
 
-    @_measurement_result
     def Keysight_Voltage_Steady(
         self,
         cell_number: int,
@@ -1480,7 +1444,7 @@ class SMUKeysightProbotMachine:
         voltage_duration: float = 20.0,
         compliance: float = 0.001,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Hold a list of steady voltages and record the current over time
         (constant-voltage stress / retention).
 
@@ -1497,10 +1461,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         if pulse_voltages is None:
             pulse_voltages = [0]
@@ -1535,8 +1501,8 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile_1(output_table, df_parameters, cell_number,'VoltageSteady', "x_time")
+        return output_table.to_dict(orient="records")
         
-    @_measurement_result
     def Keysight_Voltage_list(
         self,
         cell_number: int,
@@ -1544,12 +1510,12 @@ class SMUKeysightProbotMachine:
         trigger_period: float = 0.1,
         compliance: float = 0.001,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
             """Apply an arbitrary voltage list loaded from CSV and record the response.
 
             Args:
                 cell_number: 1-based cell index (also labels the saved data files).
-                csv_path: csv path. Default 'C:\\Users\\AMDM\\Desktop\\test.csv'.
+                csv_path: path to the voltage-list CSV (default is a Windows example path).
                 trigger_period: trigger period (s). Default 0.1.
                 compliance: compliance (mA). Default 0.001.
                 measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
@@ -1559,10 +1525,12 @@ class SMUKeysightProbotMachine:
             ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
             saved data.
 
+            
+
             Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-            - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-            - ``result``: None.
+                list[dict]: one record per measured point (keys such as ``Time (s)``,
+                ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+                as a side effect for the local lab workflow.
             """
             parameters = {"csv_path": csv_path, "trigger_period": trigger_period, "compliance": compliance, "measure_delay_position": measure_delay_position}
             
@@ -1586,9 +1554,9 @@ class SMUKeysightProbotMachine:
             #save file, adding parameters to the next rows
             df_parameters = self._params_df(parameters)
             self._savefile_1(output_table, df_parameters, cell_number,'Voltage_list', "x_time")
+            return output_table.to_dict(orient="records")
         
 
-    @_measurement_result
     def Keysight_Potent_Depress(
         self,
         cell_number: int,
@@ -1603,7 +1571,7 @@ class SMUKeysightProbotMachine:
         trigger_period: float = 0.16,
         measure_delay_position: float = 0.5,
         compliance: float = 100.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Potentiation/depression: apply repeated write then erase pulse trains over
         cycles and record the conductance change (synaptic weight update).
 
@@ -1626,10 +1594,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance}
 
@@ -1699,10 +1669,10 @@ class SMUKeysightProbotMachine:
         #Fit the potentiation and depression, also save the file
         # Fitting/analysis is done agent-side; save the raw data here.
         self._savefile(df_output_table_parameters, pd.DataFrame(), cell_number, 'PotDep')
+        return df_output_table_parameters.to_dict(orient="records")
 
 
     
-    @_measurement_result
     def Keysight_Potent_Depress_2(
         self,
         cell_number: int,
@@ -1720,7 +1690,7 @@ class SMUKeysightProbotMachine:
         t_pulse_to_read: float = 0.2,
         t_pulse_to_pulse: float = 0.5,
         wait_voltage: float = 0.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Potentiation/depression with explicit pulse-to-read and pulse-to-pulse
         timing control.
 
@@ -1746,10 +1716,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None (raw data saved; pot/dep fitting is done agent-side).
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"reset_period": reset_period, "write_voltage": write_voltage, "erase_voltage": erase_voltage, "pulse_duration": pulse_duration, "pulse_no": pulse_no, "read_voltage": read_voltage, "read_duration": read_duration, "cycle_write_erase": cycle_write_erase, "trigger_period": trigger_period, "measure_delay_position": measure_delay_position, "compliance": compliance, "t_pulse_to_read": t_pulse_to_read, "t_pulse_to_pulse": t_pulse_to_pulse, "wait_voltage": wait_voltage}
 
@@ -1834,11 +1806,11 @@ class SMUKeysightProbotMachine:
 
         # Fitting/analysis is done agent-side; save the raw data here.
         self._savefile(df_output_table_parameters, pd.DataFrame(), cell_number, 'PotDep')
+        return df_output_table_parameters.to_dict(orient="records")
 
     
         
     
-    @_measurement_result
     def Keysight_Voc_decay(
         self,
         cell_number: int,
@@ -1850,7 +1822,7 @@ class SMUKeysightProbotMachine:
         source_current: float = 0.0,
         compliance_voltage: float = 1.0,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Open-circuit voltage (Voc) decay: cycle the light on/off and record the Voc
         transient.
 
@@ -1870,10 +1842,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position}
 
@@ -1950,6 +1924,7 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'Voc_decay')
+        return output_table.to_dict(orient="records")
 
 
         ## make a graph
@@ -1960,7 +1935,6 @@ class SMUKeysightProbotMachine:
             pass 
 
 
-    @_measurement_result
     def Keysight_Voc_profile(
         self,
         cell_number: int,
@@ -1977,7 +1951,7 @@ class SMUKeysightProbotMachine:
         NPLC_value: float = 0.01,
         volt_sense_range: float = 2.0,
         curr_sense_range: float = 1e-07,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Voc profile: idle, then light on/off cycles, then a read period, recording
         the Voc transient.
 
@@ -2002,10 +1976,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_current": source_current, "compliance_voltage": compliance_voltage, "measure_delay_position": measure_delay_position, "NPLC_value": NPLC_value, "volt_sense_range": volt_sense_range, "curr_sense_range": curr_sense_range}
 
@@ -2094,8 +2070,8 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile_1(output_table, df_parameters, cell_number,'Voc_profile', "x_time")
+        return output_table.to_dict(orient="records")
 
-    @_measurement_result
     def Keysight_Jsc_profile(
         self,
         cell_number: int,
@@ -2109,7 +2085,7 @@ class SMUKeysightProbotMachine:
         source_voltage: float = 0.0,
         compliance_current: float = 0.001,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Short-circuit current (Jsc) profile under light on/off cycling.
 
         Args:
@@ -2130,10 +2106,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_on_duration": light_on_duration, "light_off_duration": light_off_duration, "on_off_cycles": on_off_cycles, "read_time": read_time, "source_voltage": source_voltage, "compliance_current": compliance_current, "measure_delay_position": measure_delay_position}
 
@@ -2215,9 +2193,9 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile_1(output_table, df_parameters, cell_number,'Jsc_profile', "x_time")
+        return output_table.to_dict(orient="records")
 
    
-    @_measurement_result
     def Keysight_Voc_decay_indiv_soaking(
         self,
         cell_number: int,
@@ -2238,7 +2216,7 @@ class SMUKeysightProbotMachine:
         compliance: float = 2.0,
         measure_delay_position: float = 0.5,
         soaking_time: float = 0.0,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Voc decay with multi-level light soaking before the on/off cycles.
 
         Args:
@@ -2266,10 +2244,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "compliance": compliance, "measure_delay_position": measure_delay_position, "soaking_time": soaking_time}
 
@@ -2372,6 +2352,7 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile(output_table, df_parameters, cell_number,'Voc_decay_indiv_soaking')
+        return output_table.to_dict(orient="records")
 
 
         ## make a graph
@@ -2381,7 +2362,6 @@ class SMUKeysightProbotMachine:
         except:
             pass 
 
-    @_measurement_result
     def Keysight_Voc_decay_ON_OFF_Variation(
         self,
         cell_number: int,
@@ -2402,7 +2382,7 @@ class SMUKeysightProbotMachine:
         source_current: float = 0.0,
         voltage_compliance: float = 1.0,
         measure_delay_position: float = 0.5,
-    ) -> Dict[str, Any]:
+    ) -> list[dict]:
         """Voc decay with variable light on/off durations per cycle.
 
         Args:
@@ -2430,10 +2410,12 @@ class SMUKeysightProbotMachine:
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
 
+        
+
         Returns:
-        Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`):
-        - ``outputs``: one record per saved file; each ``data`` holds current/voltage/time columns (e.g. 'Voltage (V)', 'Current (A)', 'Time (s)').
-        - ``result``: None.
+            list[dict]: one record per measured point (keys such as ``Time (s)``,
+            ``Voltage (V)``, ``Current (A)``). The raw data is also written to CSV
+            as a side effect for the local lab workflow.
         """
         parameters = {"trigger_period": trigger_period, "light_intensity": light_intensity, "wait_time": wait_time, "light_off_duration1": light_off_duration1, "light_on1": light_on1, "light_off_duration2": light_off_duration2, "light_on2": light_on2, "light_off_duration3": light_off_duration3, "light_on3": light_on3, "light_off_duration4": light_off_duration4, "light_on4": light_on4, "light_off_duration5": light_off_duration5, "light_on5": light_on5, "on_off_cycles": on_off_cycles, "source_current": source_current, "voltage_compliance": voltage_compliance, "measure_delay_position": measure_delay_position}
     
@@ -2526,14 +2508,14 @@ class SMUKeysightProbotMachine:
         #save file, adding parameters to the next rows
         df_parameters = self._params_df(parameters)
         self._savefile_1(output_table, df_parameters, cell_number,'Light_ON_OFF_Variation',"x_time")
+        return output_table.to_dict(orient="records")
     
               
-    @_measurement_result
     def Keysight_Time_Gap(
         self,
         value: int = None,
         sleep: float = 60,
-    ) -> Dict[str, Any]:
+    ) -> dict:
         """Idle / wait step used to insert delays into a measurement queue.
 
         Args:
@@ -2542,10 +2524,10 @@ class SMUKeysightProbotMachine:
             sleep: seconds to wait. Default 60.
 
         Returns:
-            Dict[str, Any]: standard measurement envelope (see :func:`_measurement_result`);
-                ``outputs`` is empty and ``result`` is ``None``.
+            dict: ``{"slept_s": <seconds>}``.
         """
         time.sleep(sleep)
+        return {"slept_s": sleep}
 
 
 # Alias: measurement_list() advertises ``Keysight_Digital_Retention`` while the

@@ -1,12 +1,9 @@
 """Local plotting for the GUI.
 
-PUDA machine commands return raw data and no longer plot (plotting/analysis moved
-to the agent side — see ../skills-reference). The GUI plots locally from the raw
-data in a measurement's return envelope so the lab still gets live plots.
-
-This is a simple current-vs-time (or current-vs-voltage) plot that works for any
-measurement. Richer, measurement-specific plots (IV per cycle, PV overlays, etc.)
-can be rebuilt here or done agent-side from the same raw data.
+PUDA machine commands **return** their measured data as a list of record dicts
+(``list[dict]``) and also save a CSV as a side effect. The GUI plots locally from
+the returned records so the lab still gets live plots. Richer/analysis plots are
+done agent-side (see ../skills-reference) from the same records.
 """
 
 import logging
@@ -14,39 +11,37 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def plot_envelope(envelope) -> None:
-    """Plot each saved raw table from a measurement result envelope (non-blocking).
+def plot_records(result) -> None:
+    """Plot current vs time (or voltage) from a measurement's returned records.
 
     Args:
-        envelope: the dict returned by a measurement command, i.e.
-            ``{"measurement", "cell_number", "outputs": [{"file","keyword","data"}], ...}``.
+        result: the value returned by a measurement command — a ``list[dict]`` of
+            per-point records (keys like ``Time (s)``, ``Voltage (V)``,
+            ``Current (A)``). Non-list results (e.g. ``Keysight_Time_Gap``) are ignored.
     """
-    if not isinstance(envelope, dict):
+    if not isinstance(result, list) or not result or not isinstance(result[0], dict):
+        return
+    keys = result[0].keys()
+    cur_key = next((k for k in keys if str(k).startswith("Current")), None)
+    x_key = "Time (s)" if "Time (s)" in keys else ("Voltage (V)" if "Voltage (V)" in keys else None)
+    if cur_key is None or x_key is None:
         return
     try:
         import matplotlib.pyplot as plt
     except Exception:
         logger.warning("matplotlib not available; skipping plot")
         return
-    for rec in envelope.get("outputs", []) or []:
-        data = rec.get("data")
-        if isinstance(data, dict):
-            _plot_one(plt, data, str(rec.get("keyword", "")))
-
-
-def _plot_one(plt, data: dict, title: str) -> None:
-    cur_key = next((k for k in data if str(k).startswith("Current")), None)
-    if cur_key is None:
-        return
-    x_key = "Time (s)" if "Time (s)" in data else ("Voltage (V)" if "Voltage (V)" in data else None)
-    if x_key is None:
-        return
     try:
+        x = [r.get(x_key) for r in result]
+        y = [r.get(cur_key) for r in result]
         fig, ax = plt.subplots(figsize=(8, 3))
-        ax.plot(data[x_key], data[cur_key], color="blue", alpha=0.6)
+        ax.plot(x, y, color="blue", alpha=0.6)
         ax.set_xlabel(x_key)
         ax.set_ylabel(cur_key)
-        ax.set_title(title)
         plt.show(block=False)
     except Exception:
-        logger.exception("Failed to plot %s", title)
+        logger.exception("Failed to plot measurement result")
+
+
+# Backwards-compatible alias (the GUI used to call plot_envelope).
+plot_envelope = plot_records

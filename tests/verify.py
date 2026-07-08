@@ -259,34 +259,10 @@ check("pico.PicoInstrument() constructs", pico.PicoInstrument() is not None)
 # --------------------------------------------------------------------------
 # 7. Measurements: decorated, annotated -> Dict[str, Any], envelope return.
 # --------------------------------------------------------------------------
-print("7. measurement output envelope")
+print("7. measurement return contract")
 import inspect
+import typing
 from typing import Any, Dict
-from probot_drivers.probot_machine_smu import _measurement_result
-
-
-class _Dummy:
-    def __init__(self):
-        self._param_dir = "."
-        self._data_dir = "."
-
-    def _record_output(self, file_path, keyword, table):
-        rec = {"file": file_path, "keyword": keyword, "data": None}
-        self._outputs = getattr(self, "_outputs", [])
-        self._outputs.append(rec)
-        return rec
-
-    @_measurement_result
-    def fake(self, cell_number):
-        self._record_output("f.csv", "kw", None)
-        return None
-
-
-env = _Dummy().fake(7)
-check("envelope keys", set(env) == {"measurement", "cell_number", "outputs", "result"})
-check("envelope cell_number", env["cell_number"] == 7)
-check("envelope records saved outputs",
-      env["outputs"] == [{"file": "f.csv", "keyword": "kw", "data": None}])
 
 # CRITICAL (PUDA): every measurement must be defined DIRECTLY on the machine class,
 # because PUDA exposes only own methods, not inherited ones.
@@ -299,13 +275,15 @@ for lc in ("startup", "shutdown", "home", "reset", "get_position", "identify",
            "measurement_list", "light_on", "light_off"):
     check(f"lifecycle/command defined on class: {lc}", lc in own)
 
+# Measurements RETURN their data (list[dict] records) — not an envelope, not a file.
 jvpv = SMUKeysightProbotMachine.Keysight_JV_PV
-check("measurement is decorated (wrapped)", hasattr(jvpv, "__wrapped__"))
+check("measurement not decorated (returns data directly)", not hasattr(jvpv, "__wrapped__"))
+rann = inspect.signature(jvpv, eval_str=True).return_annotation
+check("measurement annotated -> list[dict]",
+      rann in (list[dict], typing.List[dict]))
 # annotations may be strings (from `from __future__ import annotations`); resolve
 # them the way PUDA does before checking types.
 rsig = inspect.signature(jvpv, eval_str=True)
-check("measurement annotated -> Dict[str, Any]",
-      rsig.return_annotation == Dict[str, Any])
 check("measurement cell_number annotated int",
       rsig.parameters["cell_number"].annotation is int)
 

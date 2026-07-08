@@ -83,9 +83,11 @@ probot-puda/
    PUDA / an AI recipe can call e.g. `Keysight_JV_PV(cell_number=1, v_max=1.2)`
    directly. The measurement **bodies are otherwise the original
    `../probot-source/keysight.py` logic** (CSV-read preamble removed, `df_parameters`
-   for saving rebuilt from the args via `_params_df`). Commands are pure instrument
-   I/O: they **save the raw sweep to CSV and return the Dict envelope**, but do
-   **no analysis and no plotting** (see decision 4b). Preserve the sweep logic.
+   for saving rebuilt from the args via `_params_df`; the return records via
+   `.to_dict(orient="records")`). Commands are pure instrument
+   I/O: they **return their data as `list[dict]` records and also save a CSV** for
+   the lab, but do **no analysis and no plotting** (see decisions 4b and 8).
+   Preserve the sweep logic.
 
 4. **PUDA exposes only PUBLIC methods DEFINED DIRECTLY on the machine class** —
    it does NOT reflect inherited methods (per docs.puda.co: *"Only methods defined
@@ -93,9 +95,9 @@ probot-puda/
    measurements are defined **in the `SMUKeysightProbotMachine` class body** (not a
    mixin/base class) — that's why `probot_machine_smu.py` is one big self-contained
    class rather than a thin class + a `ProbotMeasurement` mixin. The
-   SCPI/data/save/plot helpers are `_`-prefixed (`_make_voltage_pulses`,
-   `_send_pulse_train_to_keysight`, `_string_to_dataframe`, `_savefile`,
-   `_make_graph*`, `_Pot_Dep_Calculation`) so PUDA does not surface them. **If you
+   SCPI/data/save helpers are `_`-prefixed (`_make_voltage_pulses`,
+   `_send_pulse_train_to_keysight`, `_string_to_dataframe`, `_savefile`) so PUDA does
+   not surface them. **If you
    add a measurement, define it on this class** (a test in `verify.py` asserts every
    `measurement_list()` name is in `SMUKeysightProbotMachine.__dict__`). The
    composed sub-drivers (`SMUKeysightProbot`, `PicoProbot`) are held as attributes,
@@ -103,13 +105,13 @@ probot-puda/
 
 4b. **Analysis + plotting are agent-side, NOT in the machine commands** (per the
    platform owner). A PUDA command is pure instrument I/O: run the sweep, save the
-   raw CSV, return the raw-data envelope. No `print`, no `matplotlib`, no PV-param
+   raw CSV, return the `list[dict]` records. No `print`, no `matplotlib`, no PV-param
    extraction / pot-dep fitting / Bayesian optimization inside a command. That code
    now lives in `../skills-reference/` (`pv_param.py`, `ht_potdep.py`) as a reference
    for **Hermes agent skills** operating on the returned raw data. The
    `Keysight_HT_PotDep` command was removed for this reason (it was an
    analysis/optimization loop). The **GUI** does its own local plotting
-   (`gui/plotting.py`) from the returned envelope. Don't reintroduce analysis or
+   (`gui/plotting.py`) from the returned records. Don't reintroduce analysis or
    plotting into a command.
 
 5. **`self.smu` is the raw PyVISA resource; `self.pico_instrument` aliases the
@@ -131,15 +133,15 @@ probot-puda/
    pandas, scipy). No matplotlib/torch — plotting is a GUI concern and analysis is
    agent-side. The stage edge depends on `probot-drivers[stage]` only, so it stays lean.
 
-8. **Measurements return a uniform `Dict[str, Any]` envelope** via the
-   `_measurement_result` decorator (in `probot_machine_smu.py`) — `{measurement,
-   cell_number, outputs, result}`, where `outputs` is the list of saved-file
-   records collected by `_savefile`/`_savefile_1` (`_record_output`). The decorator
-   wraps the bodies. Because measurements now return an envelope, any *internal*
-   measurement-to-measurement call must take `["result"]` — see `Keysight_HT_PotDep`,
-   which drives `Keysight_Potent_Depress_2` by rewriting
-   `parameter_Keysight_Potent_Depress_2.csv` (for the BO interchange) then reading
-   it back as kwargs via `_read_params` and taking `["result"]`.
+8. **Measurements RETURN their data as `list[dict]` records** (ViPSA
+   `Keithley2450` style — one dict per measured point, keys like `Time (s)`,
+   `Voltage (V)`, `Current (A)`). The **AI agent only sees the return value, not
+   files** — so the data must come back in the return. Each command also **saves a
+   CSV as a side effect** (via `_savefile`) for the local lab workflow, but that is
+   secondary. There is no wrapper/decorator and no file-centric envelope. To return
+   records the body ends with `return <table>.to_dict(orient="records")` (multi-cycle
+   commands accumulate records across cycles, e.g. `Keysight_JV_PV`). `Keysight_Time_Gap`
+   returns a small `dict`.
 
 9. **Orchestrator/GUI pass params as kwargs.** `probot_orchestrator._params_to_kwargs`
    coerces a params mapping (or a GUI `Parameter/Value` DataFrame) to kwargs,
@@ -174,7 +176,7 @@ stage-probot.move_to_safeposition()      # once, at the very end
 
 Key points that make this reliable and correct:
 - **"Finished?" is implicit.** Measurements are synchronous — the `Keysight_JV_PV`
-  call returns (with the data envelope) only when the sweep is done — so the next
+  call returns (with the record data) only when the sweep is done — so the next
   step (`unprobe`) naturally runs after completion. PUDA executes steps in order.
 - **Only overrides are passed.** `v_min`/`v_max` come from the request; every other
   parameter uses its signature default. This is exactly why measurements take typed
@@ -229,7 +231,7 @@ python tests/verify.py     # 49 checks
 `tests/verify.py` installs lightweight stubs for the heavy/hardware libs in
 `sys.modules` before importing, then checks import-safety, construction without
 hardware, primitive reflection per edge, the orchestrator's call order / control
-hooks, the GUI plugin contract, and the measurement output envelope. It does NOT
+hooks, the GUI plugin contract, and the measurement return contract. It does NOT
 execute real measurement bodies (those need real numpy + hardware).
 
 ## Pending / TODO for future agents
