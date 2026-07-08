@@ -1,4 +1,4 @@
-# probot-smu-keysight
+# probot-keysight-pico
 
 PUDA edge service for the probot **Keysight SMU + Pico light**. The light is
 co-located with the SMU (not a separate edge) because several measurements drive

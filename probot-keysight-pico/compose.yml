@@ -2,15 +2,15 @@ services:
   edge:
     build:
       context: ..
-      dockerfile: probot-smu-keysight/Dockerfile
-    image: ghcr.io/pudap/probot-smu-keysight-edge:latest
-    container_name: probot-smu-keysight-edge
+      dockerfile: probot-keysight-pico/Dockerfile
+    image: ghcr.io/pudap/probot-keysight-pico-edge:latest
+    container_name: probot-keysight-pico-edge
     restart: unless-stopped
     volumes:
-      - ./.env:/app/probot-smu-keysight/.env:ro
+      - ./.env:/app/probot-keysight-pico/.env:ro
       # Writable parameter + data directories (params get rewritten at runtime).
-      - ./Parameters:/app/probot-smu-keysight/Parameters
-      - ./Data:/app/probot-smu-keysight/Data
+      - ./Parameters:/app/probot-keysight-pico/Parameters
+      - ./Data:/app/probot-keysight-pico/Data
     healthcheck:
       test: ["CMD", "uv", "run", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s

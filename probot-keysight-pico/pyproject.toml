@@ -1,5 +1,5 @@
 [project]
-name = "probot-smu-keysight-edge"
+name = "probot-keysight-pico-edge"
 version = "0.1.0"
 description = "PUDA edge service for the probot Keysight SMU + Pico light."
 readme = "README.md"

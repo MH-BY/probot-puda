@@ -14,7 +14,7 @@ stage = [
     "pyserial>=3.5",
     "controllably",     # Ender controller (vendor API)
 ]
-# probot-smu-keysight edge: Keysight SMU (VISA) + Pico light + measurement commands.
+# probot-keysight-pico edge: Keysight SMU (VISA) + Pico light + measurement commands.
 # Machine commands are pure I/O returning raw data (no plotting/analysis), so no
 # matplotlib/torch here. Analysis + plotting live agent-side (see ../skills-reference).
 smu = [

@@ -1,7 +1,7 @@
 # PUDA workspace for the probot platform.
 #
 # Members:
-#   - probot-smu-keysight : PUDA edge service for the Keysight SMU + Pico light
+#   - probot-keysight-pico : PUDA edge service for the Keysight SMU + Pico light
 #   - probot-stage        : PUDA edge service for the Ender 3-axis stage
 #   - gui                 : the Tkinter GUI (runs on the shared drivers, in-process)
 #   - probot_drivers      : the shared hardware driver library used by all of the
@@ -17,7 +17,7 @@ requires-python = ">=3.11,<3.13"
 
 [tool.uv.workspace]
 members = [
-    "probot-smu-keysight",
+    "probot-keysight-pico",
     "probot-stage",
     "gui",
     "probot_drivers",

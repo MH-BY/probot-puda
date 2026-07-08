@@ -107,7 +107,7 @@ def check(name, cond):
 # --------------------------------------------------------------------------
 print("1. import safety")
 import probot_drivers
-from probot_drivers import SMUKeysightProbotMachine, StageProbot, measurement_list, probot_orchestrator
+from probot_drivers import KeysightPicoProbotMachine, StageProbot, measurement_list, probot_orchestrator
 
 import keysight   # gui shim
 import pico       # gui shim
@@ -119,7 +119,7 @@ check("import probot_drivers + shims", True)
 # 2. Both edge machines construct without touching hardware.
 # --------------------------------------------------------------------------
 print("2. construction without hardware")
-smu = SMUKeysightProbotMachine()
+smu = KeysightPicoProbotMachine()
 stage = StageProbot(port="COMX")
 check("smu machine wires smu+light", smu._smu and smu.light)
 check("smu/light not connected yet", not smu._smu.is_connected and not smu.light.is_connected)
@@ -266,17 +266,17 @@ from typing import Any, Dict
 
 # CRITICAL (PUDA): every measurement must be defined DIRECTLY on the machine class,
 # because PUDA exposes only own methods, not inherited ones.
-own = set(vars(SMUKeysightProbotMachine))
+own = set(vars(KeysightPicoProbotMachine))
 missing_own = [n for n in measurement_list() if n not in own]
 check(f"all measurements defined ON the machine class (missing={missing_own})", not missing_own)
 check("measurement __qualname__ belongs to the machine class",
-      SMUKeysightProbotMachine.Keysight_JV_PV.__qualname__.startswith("SMUKeysightProbotMachine"))
+      KeysightPicoProbotMachine.Keysight_JV_PV.__qualname__.startswith("KeysightPicoProbotMachine"))
 for lc in ("startup", "shutdown", "home", "reset", "get_position", "identify",
            "measurement_list", "light_on", "light_off"):
     check(f"lifecycle/command defined on class: {lc}", lc in own)
 
 # Measurements RETURN their data (list[dict] records) — not an envelope, not a file.
-jvpv = SMUKeysightProbotMachine.Keysight_JV_PV
+jvpv = KeysightPicoProbotMachine.Keysight_JV_PV
 check("measurement not decorated (returns data directly)", not hasattr(jvpv, "__wrapped__"))
 rann = inspect.signature(jvpv, eval_str=True).return_annotation
 check("measurement annotated -> list[dict]",
@@ -294,7 +294,7 @@ for p in ("v_min", "v_max", "volt_step", "compliance", "scan_rate", "cell_area",
 check("JV_PV params have defaults (callable with just cell_number)",
       all(pp.default is not inspect._empty
           for n, pp in sig.parameters.items() if n not in ("self", "cell_number")))
-ap_sig = inspect.signature(SMUKeysightProbotMachine.Keysight_analog_pulse)
+ap_sig = inspect.signature(KeysightPicoProbotMachine.Keysight_analog_pulse)
 check("integer-count default normalised to int (analog_pulse.no_of_pulses)",
       isinstance(ap_sig.parameters["no_of_pulses"].default, int)
       and ap_sig.parameters["no_of_pulses"].default == 5)
@@ -313,8 +313,8 @@ for gone in ("make_graph", "make_graph_IV", "make_graph_IV_1", "Pot_Dep_Calculat
     check(f"analysis/plotting removed from machine: {gone}", getattr(smu, gone, None) is None)
 check("Keysight_HT_PotDep (analysis) removed from commands",
       "Keysight_HT_PotDep" not in measurement_list()
-      and not hasattr(SMUKeysightProbotMachine, "Keysight_HT_PotDep"))
-import probot_drivers.probot_machine_smu as _pm
+      and not hasattr(KeysightPicoProbotMachine, "Keysight_HT_PotDep"))
+import probot_drivers.probot_machine_keysight_pico as _pm
 check("machine module does not import matplotlib/pv_param",
       not hasattr(_pm, "plt") and not hasattr(_pm, "PV_calc"))
 

@@ -1,4 +1,4 @@
-"""Main entry point for the probot-smu-keysight machine edge service.
+"""Main entry point for the probot-keysight-pico machine edge service.
 
 PUDA edge service for the probot Keysight SMU + Pico light (co-located because
 several measurements drive the light inline during the SMU acquisition). The
@@ -15,7 +15,7 @@ import psutil
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from puda import EdgeNatsClient, EdgeRunner
 
-from probot_drivers import SMUKeysightProbotMachine
+from probot_drivers import KeysightPicoProbotMachine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +64,7 @@ async def main():
     logger.info("Full config: %s", config.model_dump())
 
     logger.info("Initializing machine driver")
-    driver = SMUKeysightProbotMachine(
+    driver = KeysightPicoProbotMachine(
         smu_address=config.keysight_address,
         smu_device_no=config.keysight_device_no,
         pico_ip=config.pico_ip,

@@ -8,7 +8,7 @@ Primitives exposed: `cell_coordinates`, `move_to`, `move_to_cell`, `probe` /
 `move_to_safeposition`, `home`. Publishes the live stage position as telemetry.
 
 A full cell scan is orchestrated by PUDA calling this edge's move/probe primitives
-interleaved with the `probot-smu-keysight` measurement primitives (reference
+interleaved with the `probot-keysight-pico` measurement primitives (reference
 sequence: `probot_drivers.probot_orchestrator.run_scan`).
 
 ## Setup (native, recommended on the Windows lab PC)

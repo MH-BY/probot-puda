@@ -1,4 +1,4 @@
-"""SMU+light machine for the ``probot-smu-keysight`` edge (single self-contained driver).
+"""SMU+light machine for the ``probot-keysight-pico`` edge (single self-contained driver).
 
 The Keysight SMU and the Pico light live in **one** machine because several
 measurements drive the light inline, during the SMU acquisition, with sub-second
@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from .probot_smu_keysight import SMUKeysightProbot
+from .probot_keysight import KeysightProbot
 from .probot_pico import PicoProbot
 
 logger = logging.getLogger(__name__)
@@ -56,10 +56,10 @@ _DEFAULT_PARAM_DIR = os.path.join(os.path.dirname(__file__), "parameters")
 _DEFAULT_DATA_DIR = os.path.join("Data", "Keysight")
 
 
-class SMUKeysightProbotMachine:
+class KeysightPicoProbotMachine:
     """The probot SMU+light machine: Keysight SMU + Pico light + all measurements."""
 
-    instrument_family = "probot_smu_keysight"
+    instrument_family = "probot_keysight_pico"
 
     def __init__(
         self,
@@ -71,7 +71,7 @@ class SMUKeysightProbotMachine:
         data_dir: str | None = None,
     ) -> None:
         """Wire up the SMU + light sub-controllers (does not connect)."""
-        self._smu = SMUKeysightProbot(address=smu_address, device_no=smu_device_no)
+        self._smu = KeysightProbot(address=smu_address, device_no=smu_device_no)
         self.light = PicoProbot(ip=pico_ip, device_id=pico_id)
         # Alias expected by the measurement routines.
         self.pico_instrument = self.light
@@ -80,7 +80,7 @@ class SMUKeysightProbotMachine:
         self._data_dir = data_dir or os.environ.get("PROBOT_DATA_DIR") or _DEFAULT_DATA_DIR
 
         logger.info(
-            "SMUKeysightProbotMachine initialised (smu_address=%s, pico_ip=%s, param_dir=%s)",
+            "KeysightPicoProbotMachine initialised (smu_address=%s, pico_ip=%s, param_dir=%s)",
             smu_address, pico_ip, self._param_dir,
         )
 
@@ -378,7 +378,7 @@ class SMUKeysightProbotMachine:
             no_of_pulses: no of pulses (count). Default 5.
             compliance: compliance (mA). Default 1.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -439,7 +439,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -516,7 +516,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 100.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -590,7 +590,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 100.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -668,7 +668,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             compliance: compliance (mA). Default 100.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -735,7 +735,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 10.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -833,7 +833,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 20.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -957,7 +957,7 @@ class SMUKeysightProbotMachine:
             trigger_period: trigger period (s). Default 0.1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1082,7 +1082,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1187,7 +1187,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1384,7 +1384,7 @@ class SMUKeysightProbotMachine:
             light_on_duration: light on duration (s). Default 1.0.
             light_off_duration: light off duration (s). Default 1.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1456,7 +1456,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 0.001.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1520,7 +1520,7 @@ class SMUKeysightProbotMachine:
                 compliance: compliance (mA). Default 0.001.
                 measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-            Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+            Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
             contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
             ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
             saved data.
@@ -1589,7 +1589,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             compliance: compliance (mA). Default 100.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1711,7 +1711,7 @@ class SMUKeysightProbotMachine:
             t_pulse_to_pulse: t pulse to pulse. Default 0.5.
             wait_voltage: wait voltage (V). Default 0.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1837,7 +1837,7 @@ class SMUKeysightProbotMachine:
             compliance_voltage: compliance voltage (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1971,7 +1971,7 @@ class SMUKeysightProbotMachine:
             volt_sense_range: volt sense range. Default 2.0.
             curr_sense_range: curr sense range. Default 1e-07.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2101,7 +2101,7 @@ class SMUKeysightProbotMachine:
             compliance_current: compliance current (mA). Default 0.001.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2239,7 +2239,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             soaking_time: soaking time (s). Default 0.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2405,7 +2405,7 @@ class SMUKeysightProbotMachine:
             voltage_compliance: voltage compliance (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2532,4 +2532,4 @@ class SMUKeysightProbotMachine:
 
 # Alias: measurement_list() advertises ``Keysight_Digital_Retention`` while the
 # implementation is ``Keysight_Digital_Endurance`` (reads the Retention CSV).
-SMUKeysightProbotMachine.Keysight_Digital_Retention = SMUKeysightProbotMachine.Keysight_Digital_Endurance
+KeysightPicoProbotMachine.Keysight_Digital_Retention = KeysightPicoProbotMachine.Keysight_Digital_Endurance

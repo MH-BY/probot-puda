@@ -24,7 +24,7 @@ package — consult it when in doubt about original behaviour.
 
 | Member | Machine id | Hardware | Driver class |
 |---|---|---|---|
-| `probot-smu-keysight/` | `probot-smu-keysight` | Keysight SMU + Pico light | `SMUKeysightProbotMachine` |
+| `probot-keysight-pico/` | `probot-keysight-pico` | Keysight SMU + Pico light | `KeysightPicoProbotMachine` |
 | `probot-stage/` | `probot-stage` | Ender 3-axis stage | `StageProbot` |
 | `gui/` | — | both, in-process | uses shims → shared drivers |
 | `probot_drivers/` | — | shared library | (all of the below) |
@@ -36,23 +36,23 @@ Each `main.py` mirrors `../Vipsa-platform-example/keithley-2450/main.py`.
 
 ```
 probot-puda/
-├── pyproject.toml              # uv workspace: members = probot-smu-keysight, probot-stage, gui, probot_drivers
+├── pyproject.toml              # uv workspace: members = probot-keysight-pico, probot-stage, gui, probot_drivers
 ├── start_all_edges.bat         # launches both edges (Windows)
 ├── tests/verify.py             # hardware-free verification (run with python tests/verify.py)
 ├── probot_drivers/             # SHARED library (installable, src-layout)
 │   └── src/probot_drivers/
 │       ├── __init__.py             # LAZY (PEP 562) — importing the package pulls no heavy deps
-│       ├── probot_smu_keysight.py  # SMUKeysightProbot  — raw PyVISA session (transport only)
+│       ├── probot_keysight.py  # KeysightProbot  — raw PyVISA session (transport only)
 │       ├── probot_pico.py          # PicoProbot         — Pico G2V light
 │       ├── probot_stage.py         # StageProbot/ProbotStage — Ender stage (the stage edge's machine)
-│       ├── probot_machine_smu.py   # SMUKeysightProbotMachine — the smu-keysight machine:
-│       │                           #   composes SMU+light AND defines all 22 Keysight_* measurements
+│       ├── probot_machine_keysight_pico.py   # KeysightPicoProbotMachine — the keysight-pico machine:
+│       │                           #   composes SMU+light AND defines all 21 Keysight_* measurements
 │       │                           #   directly on the class (see decision 3)
 │       ├── probot_orchestrator.py  # run_scan() — the shared cell-scan loop
 │       └── parameters/*.csv        # packaged default measurement parameters
 ├── skills-reference/           # analysis code (pv_param, ht_potdep) for Hermes agent skills
 │                               #   (NOT imported by the edge)
-├── probot-smu-keysight/        # edge 1 (main.py + ViPSA scaffold + working Parameters/)
+├── probot-keysight-pico/        # edge 1 (main.py + ViPSA scaffold + working Parameters/)
 ├── probot-stage/               # edge 2 (main.py + ViPSA scaffold)
 └── gui/                        # keysight.py / pico.py / probebot.py shims + main_tkinter.py + Parameters/
 ```
@@ -60,7 +60,7 @@ probot-puda/
 ## Key design decisions — and WHY (do not undo without reason)
 
 1. **Two edges, not one composite machine.** The Keysight SMU and Pico light are
-   **co-located in one edge** (`SMUKeysightProbotMachine`) because six measurements
+   **co-located in one edge** (`KeysightPicoProbotMachine`) because six measurements
    drive the light *inline during* the SMU acquisition with sub-second timing
    (`Keysight_Light_Pulse`, `Keysight_Voc_decay`, `Keysight_Voc_profile`,
    `Keysight_Jsc_profile`, `Keysight_Voc_decay_indiv_soaking`,
@@ -73,7 +73,7 @@ probot-puda/
    sequence** (per cell: `move_to` → `probe` → run measurement(s) → `unprobe`,
    with stop/pause control + return-to-safe). The **GUI** uses it in-process (it
    holds both drivers); a PUDA-side recipe should replicate it by calling
-   `probot-stage` move/probe primitives interleaved with `probot-smu-keysight`
+   `probot-stage` move/probe primitives interleaved with `probot-keysight-pico`
    measurement primitives.
 
 3. **Measurements are argument-based primitives** (as of the
@@ -91,16 +91,16 @@ probot-puda/
 
 4. **PUDA exposes only PUBLIC methods DEFINED DIRECTLY on the machine class** —
    it does NOT reflect inherited methods (per docs.puda.co: *"Only methods defined
-   on this driver wrapper class are exposed to PUDA"*). So all 22 `Keysight_*`
-   measurements are defined **in the `SMUKeysightProbotMachine` class body** (not a
-   mixin/base class) — that's why `probot_machine_smu.py` is one big self-contained
+   on this driver wrapper class are exposed to PUDA"*). So all 21 `Keysight_*`
+   measurements are defined **in the `KeysightPicoProbotMachine` class body** (not a
+   mixin/base class) — that's why `probot_machine_keysight_pico.py` is one big self-contained
    class rather than a thin class + a `ProbotMeasurement` mixin. The
    SCPI/data/save helpers are `_`-prefixed (`_make_voltage_pulses`,
    `_send_pulse_train_to_keysight`, `_string_to_dataframe`, `_savefile`) so PUDA does
    not surface them. **If you
    add a measurement, define it on this class** (a test in `verify.py` asserts every
-   `measurement_list()` name is in `SMUKeysightProbotMachine.__dict__`). The
-   composed sub-drivers (`SMUKeysightProbot`, `PicoProbot`) are held as attributes,
+   `measurement_list()` name is in `KeysightPicoProbotMachine.__dict__`). The
+   composed sub-drivers (`KeysightProbot`, `PicoProbot`) are held as attributes,
    which is fine — only the machine's own methods are commands.
 
 4b. **Analysis + plotting are agent-side, NOT in the machine commands** (per the
@@ -115,7 +115,7 @@ probot-puda/
    plotting into a command.
 
 5. **`self.smu` is the raw PyVISA resource; `self.pico_instrument` aliases the
-   light.** `SMUKeysightProbotMachine` exposes `smu` as a `@property` returning
+   light.** `KeysightPicoProbotMachine` exposes `smu` as a `@property` returning
    `self._smu.smu`, and sets `self.pico_instrument = self.light`, so the ported
    routines (which call `self.smu.write(...)` and `self.pico_instrument.light_on()`)
    run unchanged.
@@ -169,7 +169,7 @@ each waits for the previous to finish because primitives are synchronous):
 for n in 1..15:
   stage-probot.move_to_cell(cell_number=n)
   stage-probot.probe()
-  smu-keysight-probot.Keysight_JV_PV(cell_number=n, v_min=-0.5, v_max=1.0)   # other params default
+  probot-keysight-pico.Keysight_JV_PV(cell_number=n, v_min=-0.5, v_max=1.0)   # other params default
   stage-probot.unprobe()                 # runs after the measurement returns
 stage-probot.move_to_safeposition()      # once, at the very end
 ```
@@ -258,7 +258,7 @@ execute real measurement bodies (those need real numpy + hardware).
 - **`Keysight_Digital_Retention`** is advertised by `measurement_list()` but the
   implementation method is named `Keysight_Digital_Endurance` (it reads
   `parameter_Keysight_Digital_Retention.csv`). A class-level alias in
-  `probot_machine_smu.py` makes the advertised name resolve. (Pre-existing source
+  `probot_machine_keysight_pico.py` makes the advertised name resolve. (Pre-existing source
   quirk.)
 - **`Keysight_Voltage_list`** in the original source has an over-indented (12-space)
   body — keep its docstring at the same indentation.

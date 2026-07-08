@@ -1,12 +1,12 @@
 """Shared driver library for the probot platform.
 
-Used by both the PUDA edge services (``probot-smu-keysight``, ``probot-stage``)
+Used by both the PUDA edge services (``probot-keysight-pico``, ``probot-stage``)
 and the Tkinter GUI (via the ``gui`` shims), so hardware control has a single
 source of truth.
 
 Edge machine drivers:
 
-* :class:`SMUKeysightProbotMachine` - the ``probot-smu-keysight`` edge
+* :class:`KeysightPicoProbotMachine` - the ``probot-keysight-pico`` edge
   (Keysight SMU + Pico light + the measurement routines). Needs the ``smu`` extra.
 * :class:`ProbotStage` - the ``probot-stage`` edge (Ender 3-axis stage). Needs the
   ``stage`` extra.
@@ -23,13 +23,13 @@ import importlib
 
 # Public name -> submodule that defines it.
 _EXPORTS = {
-    "SMUKeysightProbotMachine": "probot_machine_smu",
+    "KeysightPicoProbotMachine": "probot_machine_keysight_pico",
     "ProbotStage": "probot_stage",
     "StageProbot": "probot_stage",
-    "SMUKeysightProbot": "probot_smu_keysight",
+    "KeysightProbot": "probot_keysight",
     "PicoProbot": "probot_pico",
-    "measurement_list": "probot_machine_smu",
-    "MEASUREMENT_NAMES": "probot_machine_smu",
+    "measurement_list": "probot_machine_keysight_pico",
+    "MEASUREMENT_NAMES": "probot_machine_keysight_pico",
 }
 
 __all__ = list(_EXPORTS) + ["probot_orchestrator"]

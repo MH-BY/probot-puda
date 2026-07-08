@@ -3,7 +3,7 @@
 Refactor of the connection half of the original ``keysight.py``
 ``KeysightInstrument.__init__``. Responsibilities here are deliberately narrow:
 open / hold / close the PyVISA session. The measurement logic lives in
-the measurement routines in :mod:`probot_drivers.probot_machine_smu`,
+the measurement routines in :mod:`probot_drivers.probot_machine_keysight_pico`,
 which reaches the raw resource through this object's :attr:`smu` attribute.
 
 Changes versus the original:
@@ -23,7 +23,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class SMUKeysightProbot:
+class KeysightProbot:
     """Own the PyVISA session for the probot Keysight source-measure unit."""
 
     instrument_family = "keysight_smu_probot"

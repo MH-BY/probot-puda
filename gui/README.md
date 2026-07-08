@@ -8,7 +8,7 @@ The three modules `keysight.py`, `pico.py`, `probebot.py` are thin compatibility
 shims that preserve the GUI's original plugin contract while delegating to
 `probot_drivers`:
 
-- `keysight.py` → `SMUKeysightProbotMachine` (SMU + light + measurements)
+- `keysight.py` → `KeysightPicoProbotMachine` (SMU + light + measurements)
 - `pico.py` → `PicoProbot`
 - `probebot.py` → `StageProbot`
 
