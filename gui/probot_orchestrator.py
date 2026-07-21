@@ -20,54 +20,61 @@ Callers supply:
 
 from __future__ import annotations
 
-import csv
+import ast
 import logging
 import time
 
 logger = logging.getLogger(__name__)
 
 
-def _write_param_csv(path, params) -> None:
-    """Persist measurement parameters to ``path`` (``Parameter,Value`` columns).
+def _params_to_kwargs(params) -> dict:
+    """Coerce a params payload to measurement keyword arguments.
 
-    Accepts a pandas DataFrame (GUI style, written verbatim via ``to_csv``) or a
-    plain mapping / iterable of ``(name, value)`` pairs (edge style).
+    Measurements now take their settings as typed keyword arguments, so an item's
+    ``params`` are passed via ``**kwargs``. Accepts a mapping ``{name: value}`` or a
+    pandas ``Parameter, Value`` DataFrame (GUI style). String values are parsed with
+    ``ast.literal_eval`` and integer-valued floats are normalised to ``int`` (so
+    counts like ``no_of_pulses`` stay valid for ``range()``), matching how the
+    original CSV parser typed values.
     """
-    if hasattr(params, "to_csv"):  # pandas DataFrame
-        params.to_csv(path, index=False)
-        return
+    if params is None:
+        return {}
+    if hasattr(params, "iterrows"):  # pandas DataFrame with Parameter/Value columns
+        items = [(r["Parameter"], r["Value"]) for _, r in params.iterrows()]
+    elif hasattr(params, "items"):
+        items = list(params.items())
+    else:
+        items = list(params)
 
-    items = params.items() if hasattr(params, "items") else list(params)
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Parameter", "Value"])
-        for name, value in items:
-            writer.writerow([name, value])
+    kwargs = {}
+    for name, value in items:
+        if isinstance(value, str):
+            try:
+                value = ast.literal_eval(value)
+            except Exception:
+                pass
+        if isinstance(value, float) and not isinstance(value, bool) and value.is_integer():
+            value = int(value)
+        kwargs[str(name).strip()] = value
+    return kwargs
 
 
 def run_one_measurement(machine, item, cell_number, on_progress=lambda m: None):
-    """Write the item's parameters (if any), then dispatch one measurement.
+    """Dispatch one measurement, passing its parameters as keyword arguments.
 
     Args:
-        machine: object owning the measurement methods + ``_param_file``.
-        item: ``{"measurement": str, "params": DataFrame | mapping | None}``.
+        machine: object owning the measurement methods.
+        item: ``{"measurement": str, "params": mapping | DataFrame | None}``.
         cell_number: 1-based cell number passed to the measurement method.
     """
     measurement = item["measurement"]
-    params = item.get("params")
-    if params is not None:
-        path = machine._param_file(f"parameter_{measurement}.csv")
-        try:
-            _write_param_csv(path, params)
-        except Exception:
-            logger.exception("Failed to write parameters for %s", measurement)
-
+    kwargs = _params_to_kwargs(item.get("params"))
     fn = getattr(machine, measurement, None)
     if fn is None:
         on_progress(f"Error: measurement '{measurement}' not found")
         logger.error("Measurement '%s' not found on %r", measurement, machine)
         return None
-    return fn(cell_number)
+    return fn(cell_number, **kwargs)
 
 
 def run_scan(

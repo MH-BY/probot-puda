@@ -1,6 +1,0 @@
-Parameter,Value
-pulse_voltages,[0]
-trigger_period,0.1
-voltage_duration,20
-compliance,0.001
-measure_delay_position,0.5

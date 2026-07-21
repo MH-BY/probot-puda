@@ -1,27 +1,24 @@
 # PUDA workspace for the probot platform.
 #
+# One folder per edge (ViPSA layout): each member is a self-contained edge service
+# whose driver code lives inside its own folder (driver.py), with no shared library.
+#
 # Members:
-#   - probot-smu-keysight : PUDA edge service for the Keysight SMU + Pico light
-#   - probot-stage        : PUDA edge service for the Ender 3-axis stage
-#   - gui                 : the Tkinter GUI (runs on the shared drivers, in-process)
-#   - probot_drivers      : the shared hardware driver library used by all of the
-#                           above (no fork — one source of truth)
+#   - probot-keysight-pico : Keysight SMU + Pico light (co-located; see its driver.py)
+#   - probot-stage         : Ender 3-axis stage
+#
+# The Tkinter GUI in ../gui is DEFERRED (not a workspace member): it used to run on a
+# shared driver library that no longer exists, so it needs re-wiring to import each
+# edge's driver.py before it will run again. See gui/README.md.
 [project]
 name = "probot-puda"
 version = "0.1.0"
-description = "PUDA edge services and shared drivers for the probot instrument platform."
+description = "PUDA edge services for the probot instrument platform (one folder per edge)."
 readme = "README.md"
-# torch / botorch wheels are not yet published for 3.14 (which Vipsa uses), so the
-# probot stack targets a torch-supported interpreter.
 requires-python = ">=3.11,<3.13"
 
 [tool.uv.workspace]
 members = [
-    "probot-smu-keysight",
+    "probot-keysight-pico",
     "probot-stage",
-    "gui",
-    "probot_drivers",
 ]
-
-[tool.uv.sources]
-probot-drivers = { workspace = true }

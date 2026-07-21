@@ -3,20 +3,26 @@
 PUDA-compatible packaging of the **probot** instrument platform (Keysight SMU +
 Pico G2V LED + Ender 3-axis "ProbeBot" stage).
 
-The platform is exposed as **two** edge services, plus the original
-Tkinter GUI running on the *same* driver code:
+The platform is exposed as **two** edge services, in a **one-folder-per-edge**
+layout (ViPSA-style): each edge is self-contained, with its own `driver.py` and no
+shared library.
 
 | Member | Machine id | Hardware | Notes |
 |---|---|---|---|
-| `probot-smu-keysight` | `probot-smu-keysight` | Keysight SMU + Pico light | co-located: several measurements drive the light inline during the SMU sweep |
-| `probot-stage` | `probot-stage` | Ender 3-axis stage | independent, lean edge |
-| `gui` | — | both (in-process) | the Tkinter GUI on shared drivers |
-| `probot_drivers` | — | — | shared driver library (one source of truth) |
+| `probot-keysight-pico` | `probot-keysight-pico` | Keysight SMU + Pico light | co-located: several measurements drive the light inline during the SMU sweep. All in one `driver.py`. |
+| `probot-stage` | `probot-stage` | Ender 3-axis stage | independent, lean edge (`driver.py`) |
+
+Each `main.py` imports its driver with a sibling `from driver import …` (run from
+inside the edge folder), exactly like ViPSA's edges.
 
 A full cell scan spans both machines, so **PUDA orchestrates the loop** by calling
-`probot-stage`'s move/probe primitives interleaved with `probot-smu-keysight`'s
-measurement primitives. The canonical sequence is
-`probot_drivers.probot_orchestrator.run_scan`, which the GUI also uses in-process.
+`probot-stage`'s move/probe primitives interleaved with `probot-keysight-pico`'s
+measurement primitives: `move_to_cell` → `probe` → measure → `unprobe`, then
+`move_to_safeposition` once at the end.
+
+> The original Tkinter **GUI** (`gui/`) is **deferred**: it ran on a shared driver
+> library that no longer exists and needs re-wiring to import each edge's
+> `driver.py` before it will run again. See `gui/README.md`.
 
 ## Where to run
 
@@ -29,9 +35,9 @@ the repo on any OS — the drivers are import-safe without hardware.
 
 ```bash
 # per edge:
-cd probot-smu-keysight   # or probot-stage
+cd probot-keysight-pico   # or probot-stage
 cp .env.example .env      # edit MACHINE_ID, NATS_SERVERS, addresses
-uv sync                   # smu edge: add --extra analysis for Keysight_HT_PotDep
+uv sync
 uv run python main.py
 # ...or launch both at once from the workspace root:
 start_all_edges.bat
@@ -39,14 +45,6 @@ start_all_edges.bat
 
 The SMU edge needs a Windows VISA backend (NI-VISA / Keysight IO Libraries) and
 the `g2vpico` package; the stage edge needs `controllably` + `pyserial`.
-
-## Run the GUI (same drivers)
-
-```bash
-cd gui
-uv sync
-uv run python main_tkinter.py
-```
 
 ## Verify (no hardware needed)
 

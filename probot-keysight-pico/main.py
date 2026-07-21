@@ -1,4 +1,4 @@
-"""Main entry point for the probot-smu-keysight machine edge service.
+"""Main entry point for the probot-keysight-pico machine edge service.
 
 PUDA edge service for the probot Keysight SMU + Pico light (co-located because
 several measurements drive the light inline during the SMU acquisition). The
@@ -15,14 +15,14 @@ import psutil
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from puda import EdgeNatsClient, EdgeRunner
 
-from probot_drivers import SMUKeysightProbotMachine
+from driver import KeysightPicoProbotMachine
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     force=True,
 )
-logging.getLogger("probot_drivers").setLevel(logging.WARNING)
+logging.getLogger("driver").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -35,8 +35,7 @@ class Config(BaseSettings):
     # Pico G2V light controller.
     pico_ip: str | None = None
     pico_id: str | None = None
-    # Writable parameter / data directories (defaults inside the machine if unset).
-    param_dir: str | None = None
+    # Writable data directory for saved results (default inside the machine if unset).
     data_dir: str | None = None
 
     model_config = SettingsConfigDict(
@@ -64,12 +63,11 @@ async def main():
     logger.info("Full config: %s", config.model_dump())
 
     logger.info("Initializing machine driver")
-    driver = SMUKeysightProbotMachine(
+    driver = KeysightPicoProbotMachine(
         smu_address=config.keysight_address,
         smu_device_no=config.keysight_device_no,
         pico_ip=config.pico_ip,
         pico_id=config.pico_id,
-        param_dir=config.param_dir,
         data_dir=config.data_dir,
     )
     driver.startup()

@@ -1,0 +1,18 @@
+services:
+  edge:
+    build:
+      context: ..
+      dockerfile: probot-keysight-pico/Dockerfile
+    image: ghcr.io/pudap/probot-keysight-pico-edge:latest
+    container_name: probot-keysight-pico-edge
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/probot-keysight-pico/.env:ro
+      # Writable output-data directory.
+      - ./Data:/app/probot-keysight-pico/Data
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

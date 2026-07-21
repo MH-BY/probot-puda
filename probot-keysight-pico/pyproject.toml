@@ -1,5 +1,5 @@
 [project]
-name = "probot-smu-keysight-edge"
+name = "probot-keysight-pico-edge"
 version = "0.1.0"
 description = "PUDA edge service for the probot Keysight SMU + Pico light."
 readme = "README.md"
@@ -12,9 +12,10 @@ dependencies = [
     "setuptools<81",
     "websocket-client>=1.8.0",
     "psutil>=6.1.1",
-    "probot-drivers[smu]",
+    # Device stack (SMU + Pico light + measurement math), formerly probot-drivers[smu].
+    "pyvisa>=1.14.1",
+    "g2vpico",          # Pico G2V LED controller (vendor API)
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.11",      # linregress (Keysight_Substrate_R)
 ]
-
-[project.optional-dependencies]
-# Bayesian-optimization measurement (Keysight_HT_PotDep) needs the analysis extra.
-analysis = ["probot-drivers[smu,analysis]"]

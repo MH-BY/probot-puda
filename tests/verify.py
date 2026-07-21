@@ -1,24 +1,32 @@
-"""Hardware-free verification for the probot-puda integration (2-edge layout).
+"""Hardware-free verification for the probot-puda edges (one-folder-per-edge layout).
 
-Network access to PyPI is unavailable in this environment, so the heavy
-scientific deps (numpy/pandas/scipy/matplotlib) and the hardware/vendor libs
+Each edge is now self-contained: its driver code lives in ``<edge>/driver.py`` and
+there is no shared ``probot_drivers`` package. This harness loads each edge's
+``driver.py`` directly by file path (the same way each edge's ``main.py`` does with
+``from driver import ...``, just under a unique module name so both can coexist in
+one process for testing).
+
+Network access to PyPI is unavailable here, so the heavy scientific deps
+(numpy/pandas/scipy/matplotlib) and the hardware/vendor libs
 (pyvisa/g2vpico/controllably) are replaced with lightweight stubs installed in
-``sys.modules`` *before* importing ``probot_drivers``. The measurement *bodies*
-are never executed here - these checks cover import-safety, construction without
-hardware, PUDA primitive reflection for each edge machine, the shared
-orchestrator's call order / control hooks, and the GUI plugin contract via the
-shims.
+``sys.modules`` *before* the drivers import. The measurement *bodies* are never
+executed - these checks cover import-safety, construction without hardware, PUDA
+primitive reflection per edge, and the measurement return/`_`-helper contract.
+
+The Tkinter GUI and the shared ``probot_orchestrator`` are DEFERRED (see
+gui/README.md), so their call-order / plugin-contract checks are not run here.
 
 Run: ``python tests/verify.py``  (exits non-zero on first failure).
 """
 
 import sys
 import types
+import importlib.util
+import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "probot_drivers" / "src"))
-sys.path.insert(0, str(ROOT / "gui"))  # GUI shims live next to the GUI
 
 
 # --------------------------------------------------------------------------
@@ -90,6 +98,19 @@ _move.Cartesian = _cart
 
 
 # --------------------------------------------------------------------------
+# Load each edge's self-contained driver.py by path (unique module names so the
+# two edges can be imported together in this single test process).
+# --------------------------------------------------------------------------
+def _load_edge_driver(edge_folder, mod_name):
+    path = ROOT / edge_folder / "driver.py"
+    spec = importlib.util.spec_from_file_location(mod_name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[mod_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# --------------------------------------------------------------------------
 # Tiny assert harness.
 # --------------------------------------------------------------------------
 _checks = []
@@ -103,23 +124,42 @@ def check(name, cond):
 
 
 # --------------------------------------------------------------------------
-# 1. Import safety (no hardware, no network).
+# 0. Installable dependency metadata.
+# --------------------------------------------------------------------------
+print("0. dependency metadata")
+with (ROOT / "probot-stage" / "pyproject.toml").open("rb") as f:
+    stage_dependencies = tomllib.load(f)["project"]["dependencies"]
+stage_dependency_names = {
+    re.split(r"[<>=!~;\[]", requirement, maxsplit=1)[0].strip().lower()
+    for requirement in stage_dependencies
+}
+check(
+    "stage uses the published control-lab-ly distribution",
+    "control-lab-ly" in stage_dependency_names
+    and "controllably" not in stage_dependency_names,
+)
+
+
+# --------------------------------------------------------------------------
+# 1. Import safety (no hardware, no network) — each edge's driver.py loads.
 # --------------------------------------------------------------------------
 print("1. import safety")
-import probot_drivers
-from probot_drivers import SMUKeysightProbotMachine, StageProbot, measurement_list, probot_orchestrator
+kp = _load_edge_driver("probot-keysight-pico", "kp_driver")
+stage_mod = _load_edge_driver("probot-stage", "stage_driver")
 
-import keysight   # gui shim
-import pico       # gui shim
-import probebot   # gui shim
-check("import probot_drivers + shims", True)
+KeysightPicoProbotMachine = kp.KeysightPicoProbotMachine
+StageProbot = stage_mod.StageProbot
+measurement_list = kp.measurement_list
+check("both edge driver.py modules import", True)
+check("keysight-pico bundles its sub-drivers",
+      hasattr(kp, "KeysightProbot") and hasattr(kp, "PicoProbot"))
 
 
 # --------------------------------------------------------------------------
 # 2. Both edge machines construct without touching hardware.
 # --------------------------------------------------------------------------
 print("2. construction without hardware")
-smu = SMUKeysightProbotMachine()
+smu = KeysightPicoProbotMachine()
 stage = StageProbot(port="COMX")
 check("smu machine wires smu+light", smu._smu and smu.light)
 check("smu/light not connected yet", not smu._smu.is_connected and not smu.light.is_connected)
@@ -153,147 +193,67 @@ check("stage position shape", stage.get_position() == {"x": 1.0, "y": 2.0, "z": 
 
 
 # --------------------------------------------------------------------------
-# 5. Orchestrator: call order, control hooks, return-to-safe.
+# 5. Measurements: defined ON the class, annotated, typed kwargs with defaults.
 # --------------------------------------------------------------------------
-print("5. orchestrator")
-
-
-class FakeStage:
-    def __init__(self):
-        self.events = []
-
-    def cell_coordinates(self):
-        return [[i, i, i] for i in range(81)]
-
-    def move_to(self, pos):
-        self.events.append(("move", pos[0]))
-
-    def probing(self):
-        self.events.append(("probe", None))
-
-    def unprobing(self):
-        self.events.append(("unprobe", None))
-
-    def move_to_safeposition(self):
-        self.events.append(("safe", None))
-
-
-fstage = FakeStage()
-ran = []
-plan = [{"measurement": "Keysight_JV_PV"}, {"measurement": "Keysight_Voc_decay"}]
-results = probot_orchestrator.run_scan(
-    None, fstage, plan,
-    cells=[1, 2], num_loops=1, mode="regular",
-    run_measurement=lambda item, cell: ran.append((item["measurement"], cell)) or "ok",
-)
-kinds = [e[0] for e in fstage.events]
-check("per-cell order move->probe->...->unprobe",
-      kinds == ["move", "probe", "unprobe", "move", "probe", "unprobe", "safe"])
-check("measurements run per cell", ran == [
-    ("Keysight_JV_PV", 1), ("Keysight_Voc_decay", 1),
-    ("Keysight_JV_PV", 2), ("Keysight_Voc_decay", 2)])
-check("results recorded", len(results) == 4 and results[0]["cell"] == 1)
-
-# stop hook halts the scan
-fstage2 = FakeStage()
-probot_orchestrator.run_scan(
-    None, fstage2, [{"measurement": "m"}],
-    cells=[1, 2, 3], num_loops=1, mode="regular",
-    should_stop=lambda: True,
-)
-check("should_stop halts before any cell", [e[0] for e in fstage2.events] == ["safe"])
-
-# custom mode does not auto-return to safe
-fstage3 = FakeStage()
-probot_orchestrator.run_scan(
-    None, fstage3, [{"measurement": "m"}],
-    cells=[1], num_loops=1, mode="custom",
-    run_measurement=lambda item, cell: None,
-)
-check("custom mode skips auto return-to-safe", "safe" not in [e[0] for e in fstage3.events])
-
-# built-in dispatch path (machine-based), with parameter writing
-import tempfile
-import csv as _csv
-
-tmp = Path(tempfile.mkdtemp())
-
-
-class FakeMachine:
-    def __init__(self):
-        self.called = []
-
-    def _param_file(self, name):
-        return str(tmp / name)
-
-    def Keysight_JV_PV(self, cell):
-        self.called.append(cell)
-        return {"cell": cell}
-
-
-machine = FakeMachine()
-fstage4 = FakeStage()
-probot_orchestrator.run_scan(
-    machine, fstage4,
-    [{"measurement": "Keysight_JV_PV", "params": {"v_max": 1.0, "compliance": 100}}],
-    cells=[5], num_loops=1, mode="regular",
-)
-check("built-in dispatch called machine method", machine.called == [5])
-written = tmp / "parameter_Keysight_JV_PV.csv"
-check("params written to CSV", written.exists())
-rows = list(_csv.reader(open(written)))
-check("param CSV header + rows", rows[0] == ["Parameter", "Value"] and ["v_max", "1.0"] in rows)
-
-
-# --------------------------------------------------------------------------
-# 6. GUI plugin contract via shims.
-# --------------------------------------------------------------------------
-print("6. GUI contract")
-import importlib
-
-m = importlib.import_module("keysight")
-check("keysight.measurement_list()", isinstance(m.measurement_list(), list) and m.measurement_list())
-KI = getattr(m, "KeysightInstrument")
-inst = KI()  # no-arg; connects SMU (stub fails gracefully) + light (stub ok)
-check("KeysightInstrument() no-arg ok", inst is not None)
-check("delegates measurement attr", callable(getattr(inst, "Keysight_JV_PV")))
-check("delegates Digital_Retention alias", callable(getattr(inst, "Keysight_Digital_Retention")))
-check("ProbeBot() constructs + connects", probebot.ProbeBot().is_connected)
-check("pico.PicoInstrument() constructs", pico.PicoInstrument() is not None)
-
-
-# --------------------------------------------------------------------------
-# 7. Measurements: decorated, annotated -> Dict[str, Any], envelope return.
-# --------------------------------------------------------------------------
-print("7. measurement output envelope")
+print("5. measurement return contract")
 import inspect
-from typing import Any, Dict
-from probot_drivers.probot_measurement import _measurement_result, ProbotMeasurement
+import typing
 
+# CRITICAL (PUDA): every measurement must be defined DIRECTLY on the machine class,
+# because PUDA exposes only own methods, not inherited ones.
+own = set(vars(KeysightPicoProbotMachine))
+missing_own = [n for n in measurement_list() if n not in own]
+check(f"all measurements defined ON the machine class (missing={missing_own})", not missing_own)
+check("measurement __qualname__ belongs to the machine class",
+      KeysightPicoProbotMachine.Keysight_JV_PV.__qualname__.startswith("KeysightPicoProbotMachine"))
+for lc in ("startup", "shutdown", "home", "reset", "get_position", "identify",
+           "measurement_list", "light_on", "light_off"):
+    check(f"lifecycle/command defined on class: {lc}", lc in own)
 
-class _Dummy(ProbotMeasurement):
-    def __init__(self):
-        self._param_dir = "."
-        self._data_dir = "."
-
-    @_measurement_result
-    def fake(self, cell_number):
-        self._record_output("f.csv", "kw", None)
-        return None
-
-
-env = _Dummy().fake(7)
-check("envelope keys", set(env) == {"measurement", "cell_number", "outputs", "result"})
-check("envelope cell_number", env["cell_number"] == 7)
-check("envelope records saved outputs",
-      env["outputs"] == [{"file": "f.csv", "keyword": "kw", "data": None}])
-
-jvpv = SMUKeysightProbotMachine.Keysight_JV_PV
-check("measurement is decorated (wrapped)", hasattr(jvpv, "__wrapped__"))
-check("measurement annotated -> Dict[str, Any]",
-      inspect.signature(jvpv).return_annotation == Dict[str, Any])
+# Measurements RETURN their data (list[dict] records) — not an envelope, not a file.
+jvpv = KeysightPicoProbotMachine.Keysight_JV_PV
+check("measurement not decorated (returns data directly)", not hasattr(jvpv, "__wrapped__"))
+rann = inspect.signature(jvpv, eval_str=True).return_annotation
+check("measurement annotated -> list[dict]",
+      rann in (list[dict], typing.List[dict]))
+# annotations may be strings (from `from __future__ import annotations`); resolve
+# them the way PUDA does before checking types.
+rsig = inspect.signature(jvpv, eval_str=True)
 check("measurement cell_number annotated int",
-      inspect.signature(jvpv).parameters["cell_number"].annotation is int)
+      rsig.parameters["cell_number"].annotation is int)
+
+# measurements take their settings as typed kwargs WITH DEFAULTS (from the CSVs)
+sig = inspect.signature(jvpv)
+for p in ("v_min", "v_max", "volt_step", "compliance", "scan_rate", "cell_area", "no_cycles"):
+    check(f"JV_PV param present: {p}", p in sig.parameters)
+check("JV_PV params have defaults (callable with just cell_number)",
+      all(pp.default is not inspect._empty
+          for n, pp in sig.parameters.items() if n not in ("self", "cell_number")))
+ap_sig = inspect.signature(KeysightPicoProbotMachine.Keysight_analog_pulse)
+check("integer-count default normalised to int (analog_pulse.no_of_pulses)",
+      isinstance(ap_sig.parameters["no_of_pulses"].default, int)
+      and ap_sig.parameters["no_of_pulses"].default == 5)
+
+
+# --------------------------------------------------------------------------
+# 6. SCPI/data/save helpers are PRIVATE -> not part of the PUDA primitive surface.
+# --------------------------------------------------------------------------
+print("6. helpers hidden from primitive surface")
+for h in ("make_voltage_pulses", "send_pulse_train_to_keysight", "string_to_dataframe",
+          "savefile", "savefile_1"):
+    check(f"helper not public: {h}", getattr(smu, h, None) is None)
+    check(f"private helper present: _{h}", callable(getattr(smu, "_" + h, None)))
+
+# analysis + plotting are removed from the machine (they become agent skills)
+for gone in ("make_graph", "make_graph_IV", "make_graph_IV_1", "Pot_Dep_Calculation",
+             "_make_graph", "_make_graph_IV", "_make_graph_IV_1", "_Pot_Dep_Calculation",
+             "_htpd", "PV_calc"):
+    check(f"analysis/plotting removed from machine: {gone}", getattr(smu, gone, None) is None)
+check("Keysight_HT_PotDep (analysis) removed from commands",
+      "Keysight_HT_PotDep" not in measurement_list()
+      and not hasattr(KeysightPicoProbotMachine, "Keysight_HT_PotDep"))
+check("driver module does not import matplotlib/pv_param",
+      not hasattr(kp, "plt") and not hasattr(kp, "PV_calc"))
 
 
 # --------------------------------------------------------------------------

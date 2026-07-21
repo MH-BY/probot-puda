@@ -15,6 +15,7 @@ import copy
 
 # Shared cell-scan orchestration (used by BOTH this GUI and the PUDA edge service).
 from probot_drivers import probot_orchestrator
+import plotting
 
 # Initialize ProbeBot
 probe_bot = ProbeBot()
@@ -974,21 +975,21 @@ class App:
                 return
             
             equipment = equipment_class()
-            
-            # Load the parameters from this specific queue item
-            if queue_item['parameters'] is not None:
-                # Save queue item's parameters temporarily to the CSV file
-                parameters_file = os.path.join('Parameters', f'parameter_{queue_item["measurement"]}.csv')
-                queue_item['parameters'].to_csv(parameters_file, index=False)
-            
+
+            # Pass this queue item's parameters as keyword arguments (measurements
+            # now take typed args with defaults instead of reading a CSV).
+            kwargs = probot_orchestrator._params_to_kwargs(queue_item.get('parameters'))
+
             measurement_function = getattr(equipment, queue_item['measurement'], None)
-            
+
             if measurement_function is None:
                 self.print_to_output(f"Error: Measurement function not found")
                 return
-            
-            measurement_function(cell_number)
-            
+
+            # Commands return raw data (no plotting); plot it locally in the GUI.
+            envelope = measurement_function(cell_number, **kwargs)
+            plotting.plot_envelope(envelope)
+
         except Exception as e:
             self.print_to_output(f"    Error executing measurement: {e}")
 
@@ -1004,13 +1005,17 @@ class App:
             
             equipment = equipment_class()
             measurement_function = getattr(equipment, self.selected_measurement, None)
-            
+
             if measurement_function is None:
                 self.print_to_output(f"Error: Measurement function not found")
                 return
-            
-            measurement_function(cell_number)
-            
+
+            # Pass the currently-loaded parameters as keyword arguments.
+            kwargs = probot_orchestrator._params_to_kwargs(getattr(self, 'parameters', None))
+            # Commands return raw data (no plotting); plot it locally in the GUI.
+            envelope = measurement_function(cell_number, **kwargs)
+            plotting.plot_envelope(envelope)
+
         except Exception as e:
             self.print_to_output(f"Error executing measurement: {e}")
 

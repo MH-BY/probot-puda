@@ -1,15 +1,16 @@
 # probot-stage
 
 PUDA edge service for the probot **Ender 3-axis "ProbeBot" stage**. A separate,
-lean edge (only the `stage` driver extra: pyserial + controllably).
+lean edge (only pyserial + controllably). Its whole driver is one self-contained
+`driver.py`; `main.py` imports it with `from driver import ProbotStage`.
 
 Primitives exposed: `cell_coordinates`, `move_to`, `move_to_cell`, `probe` /
 `unprobe` (aka `probing`/`unprobing`), `move_to_cell1`, `move_to_cell81`,
 `move_to_safeposition`, `home`. Publishes the live stage position as telemetry.
 
 A full cell scan is orchestrated by PUDA calling this edge's move/probe primitives
-interleaved with the `probot-smu-keysight` measurement primitives (reference
-sequence: `probot_drivers.probot_orchestrator.run_scan`).
+interleaved with the `probot-keysight-pico` measurement primitives (`move_to_cell`
+→ `probe` → measure → `unprobe`, then `move_to_safeposition` once at the end).
 
 ## Setup (native, recommended on the Windows lab PC)
 

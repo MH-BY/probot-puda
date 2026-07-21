@@ -2,8 +2,8 @@
 
 Ported from the original ``HT_PotDep.py``. Heavy (torch/botorch/gpytorch) imports
 are why this module is imported lazily by the measurement routines. I/O paths are
-configurable via the module-level ``PARAM_DIR`` / ``DATA_DIR`` (set by
-``probot_measurement`` before each call).
+configurable via the module-level ``PARAM_DIR`` / ``DATA_DIR`` (set by the machine
+driver before each call).
 """
 #HT workflow for potentiation and depression
 import pandas as pd
@@ -33,7 +33,7 @@ from botorch.utils.multi_objective.box_decompositions.non_dominated import Nondo
 from gpytorch.mlls.sum_marginal_log_likelihood import SumMarginalLogLikelihood
 from botorch.fit import fit_gpytorch_mll
 
-# --- probot: configurable I/O locations (set by probot_measurement before use) ---
+# --- probot: configurable I/O locations (set by the machine driver before use) ---
 PARAM_DIR = "Parameters"
 DATA_DIR = os.path.join("Data", "Keysight")
 

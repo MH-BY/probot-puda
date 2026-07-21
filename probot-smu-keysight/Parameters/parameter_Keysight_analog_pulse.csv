@@ -1,9 +1,0 @@
-Parameter,Value
-pulse_voltage,0.3
-read_voltage,0.2
-trigger_period,0.1
-measure_delay_position,0.5
-pulse_duration,1.0
-read_duration,60.0
-no_of_pulses,5.0
-compliance,1.0
