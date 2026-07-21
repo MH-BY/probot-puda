@@ -22,6 +22,8 @@ Run: ``python tests/verify.py``  (exits non-zero on first failure).
 import sys
 import types
 import importlib.util
+import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,6 +121,23 @@ def check(name, cond):
     print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
     if not cond:
         raise AssertionError(name)
+
+
+# --------------------------------------------------------------------------
+# 0. Installable dependency metadata.
+# --------------------------------------------------------------------------
+print("0. dependency metadata")
+with (ROOT / "probot-stage" / "pyproject.toml").open("rb") as f:
+    stage_dependencies = tomllib.load(f)["project"]["dependencies"]
+stage_dependency_names = {
+    re.split(r"[<>=!~;\[]", requirement, maxsplit=1)[0].strip().lower()
+    for requirement in stage_dependencies
+}
+check(
+    "stage uses the published control-lab-ly distribution",
+    "control-lab-ly" in stage_dependency_names
+    and "controllably" not in stage_dependency_names,
+)
 
 
 # --------------------------------------------------------------------------

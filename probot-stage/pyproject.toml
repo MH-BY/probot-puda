@@ -14,5 +14,6 @@ dependencies = [
     "psutil>=6.1.1",
     # Stage device stack, formerly probot-drivers[stage].
     "pyserial>=3.5",
-    "controllably",     # Ender controller (vendor API)
+    # Published distribution; its import package remains `controllably`.
+    "control-lab-ly>=2.1.0,<3",
 ]
