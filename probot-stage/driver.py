@@ -137,7 +137,7 @@ class ProbotStage:
 
         Step 1 of measuring a cell. The full per-cell sequence a scan should follow
         is: ``move_to_cell(n)`` -> ``probe()`` -> run the measurement on the
-        ``smu-keysight-probot`` machine (e.g. ``Keysight_JV_PV(cell_number=n, ...)``)
+        ``probot-keysight-pico`` machine (e.g. ``Keysight_JV_PV(cell_number=n, ...)``)
         -> ``unprobe()``. Repeat for each cell, then ``move_to_safeposition()``.
 
         Args:
@@ -159,7 +159,7 @@ class ProbotStage:
     def unprobe(self) -> None:
         """Raise the probe to release contact (call after the measurement finishes).
 
-        Run once the ``smu-keysight-probot`` measurement for this cell has returned,
+        Run once the ``probot-keysight-pico`` measurement for this cell has returned,
         before moving to the next cell.
         """
         logger.debug("Unprobing")

@@ -1,4 +1,14 @@
-"""SMU+light machine for the ``probot-smu-keysight`` edge (single self-contained driver).
+"""Self-contained driver for the ``probot-keysight-pico`` edge.
+
+This one module bundles everything the edge needs, in dependency order:
+
+* :class:`KeysightProbot` - the Keysight SMU PyVISA transport (opens the session).
+* :class:`PicoProbot` - the Pico G2V light controller.
+* :class:`KeysightPicoProbotMachine` - the PUDA machine that composes the two and
+  defines every ``Keysight_*`` measurement command directly on its class body.
+
+``main.py`` imports :class:`KeysightPicoProbotMachine` from here (``from driver
+import ...``), mirroring the ViPSA one-folder-per-edge layout.
 
 The Keysight SMU and the Pico light live in **one** machine because several
 measurements drive the light inline, during the SMU acquisition, with sub-second
@@ -29,10 +39,249 @@ import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from .probot_smu_keysight import SMUKeysightProbot
-from .probot_pico import PicoProbot
-
 logger = logging.getLogger(__name__)
+
+
+# ===========================================================================
+# SMU transport sub-driver — owns the Keysight PyVISA session.
+# The measurement routines below reach the raw resource via ``self.smu``.
+# ===========================================================================
+class KeysightProbot:
+    """Own the PyVISA session for the probot Keysight source-measure unit."""
+
+    instrument_family = "keysight_smu_probot"
+
+    def __init__(self, address: str | None = None, device_no: int = 0) -> None:
+        """Store connection config (does not connect).
+
+        Args:
+            address: VISA resource string (e.g. ``"USB0::0x0957::...::INSTR"``).
+                When ``None``, :meth:`startup` falls back to the ``device_no``-th
+                resource returned by the VISA resource manager.
+            device_no: Index into ``list_resources()`` used only when ``address``
+                is not given.
+        """
+        self.address = address
+        self.device_no = device_no
+        self.rm = None
+        self.smu = None  # raw pyvisa resource; consumed by the measurement routines
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True once :meth:`startup` has opened the VISA session."""
+        return self.smu is not None
+
+    def startup(self) -> bool:
+        """Open the VISA session to the SMU."""
+        if self.is_connected:
+            return True
+        try:
+            import pyvisa
+
+            self.rm = pyvisa.ResourceManager()
+            address = self.address
+            if address is None:
+                resources = list(self.rm.list_resources())
+                if not resources:
+                    raise RuntimeError("No VISA resources found")
+                address = resources[self.device_no]
+            self.address = address
+            self.smu = self.rm.open_resource(address)
+            logger.info("Connected to Keysight SMU at %s", address)
+            return True
+        except Exception:
+            logger.exception("Failed to connect to Keysight SMU (address=%s)", self.address)
+            self.smu = None
+            return False
+
+    def identify(self) -> str:
+        """Return the SMU ``*IDN?`` string."""
+        return self.smu.query("*IDN?")
+
+    def shutdown(self) -> bool:
+        """Turn the output off (best effort) and close the VISA session."""
+        try:
+            if self.is_connected:
+                try:
+                    self.smu.write(":OUTP OFF")
+                except Exception:
+                    logger.exception("Error turning SMU output off during shutdown")
+                self.smu.close()
+        finally:
+            self.smu = None
+        return True
+
+
+# ===========================================================================
+# Pico G2V light sub-driver — controlled inline by several measurements.
+# ===========================================================================
+class PicoProbot:
+    """Control the probot Pico G2V LED over Ethernet.
+
+    The constructor only stores configuration; call :meth:`startup` to open the
+    connection. Global intensity is on a 0-100 scale.
+    """
+
+    def __init__(self, ip: str | None = None, device_id: str | None = None) -> None:
+        """Store connection config (does not connect).
+
+        Args:
+            ip: IP address of the Pico controller (typically link-local,
+                e.g. ``"169.254.x.x"``).
+            device_id: Pico device serial id (the controller's hardware id).
+        """
+        self.ip = ip
+        self.device_id = device_id
+        self.pico = None
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True once :meth:`startup` has opened the device."""
+        return self.pico is not None
+
+    def startup(self) -> bool:
+        """Open the connection to the Pico controller and turn the light off.
+
+        Returns:
+            True on success, False if the device could not be reached.
+        """
+        if self.is_connected:
+            return True
+        try:
+            from g2vpico import G2VPico
+
+            self.pico = G2VPico(self.ip, self.device_id)
+            self.light_off()
+            logger.info("Connected to Pico G2V at %s (%s)", self.ip, self.device_id)
+            return True
+        except Exception:
+            logger.exception("Failed to connect to Pico G2V at %s", self.ip)
+            self.pico = None
+            return False
+
+    def shutdown(self) -> bool:
+        """Turn the light off and drop the device handle."""
+        try:
+            if self.is_connected:
+                self.light_off()
+        except Exception:
+            logger.exception("Error while turning Pico light off during shutdown")
+        finally:
+            self.pico = None
+        return True
+
+    # ------------------------------------------------------------------
+    # Light primitives (ported verbatim from pico.py)
+    # ------------------------------------------------------------------
+
+    def light_on(self):
+        self.pico.set_global_intensity(100)
+
+    def light_off(self):
+        self.pico.set_global_intensity(0)
+
+    def light_pulse(self, light_intensity, read_duration, light_on_duration, light_off_duration):
+        no_of_cycle = int(read_duration / (light_on_duration + light_off_duration))
+        for i in range(no_of_cycle):
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on_duration)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration)
+
+    def voc_light_pulse(self, light_intensity, on_off_cycles, light_on_duration, light_off_duration):
+        for i in range(on_off_cycles):
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on_duration)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration)
+
+    def voc_profile_light_pulse(self, light_intensity, idle_time, on_off_cycles, light_on_duration, light_off_duration, read_period):
+        self.pico.set_global_intensity(0)
+        time.sleep(idle_time)
+
+        for i in range(on_off_cycles):
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on_duration)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration)
+
+        self.pico.set_global_intensity(0)
+        time.sleep(read_period)
+
+    def voc_light_pulse_soak(self, light_intensity, on_off_cycles, soaking_time,
+                             light_off_duration1,
+                             light_on1,
+                             light_off_duration2,
+                             light_on2,
+                             light_off_duration3,
+                             light_on3,
+                             light_off_duration4,
+                             light_on4,
+                             light_off_duration5,
+                             light_on5):
+        # start with soaking
+        self.pico.set_global_intensity(light_intensity)
+        time.sleep(soaking_time)
+        # then on/off
+        for i in range(on_off_cycles):
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration1)
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on1)
+
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration2)
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on2)
+
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration3)
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on3)
+
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration4)
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on4)
+
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration5)
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on5)
+
+    def light_pulse_ON_OFF_variation(self, light_intensity, on_off_cycles, idle_time,
+                                     light_on1, light_off_duration1,
+                                     light_on2, light_off_duration2,
+                                     light_on3, light_off_duration3,
+                                     light_on4, light_off_duration4,
+                                     light_on5, light_off_duration5):
+        self.pico.set_global_intensity(0)
+        time.sleep(idle_time)
+        for i in range(on_off_cycles):
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on1)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration1)
+
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on2)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration2)
+
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on3)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration3)
+
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on4)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration4)
+
+            self.pico.set_global_intensity(light_intensity)
+            time.sleep(light_on5)
+            self.pico.set_global_intensity(0)
+            time.sleep(light_off_duration5)
 
 
 MEASUREMENT_NAMES = [
@@ -52,14 +301,13 @@ def measurement_list():
     return list(MEASUREMENT_NAMES)
 
 
-_DEFAULT_PARAM_DIR = os.path.join(os.path.dirname(__file__), "parameters")
 _DEFAULT_DATA_DIR = os.path.join("Data", "Keysight")
 
 
-class SMUKeysightProbotMachine:
+class KeysightPicoProbotMachine:
     """The probot SMU+light machine: Keysight SMU + Pico light + all measurements."""
 
-    instrument_family = "probot_smu_keysight"
+    instrument_family = "probot_keysight_pico"
 
     def __init__(
         self,
@@ -67,21 +315,24 @@ class SMUKeysightProbotMachine:
         smu_device_no: int = 0,
         pico_ip: str | None = None,
         pico_id: str | None = None,
-        param_dir: str | None = None,
         data_dir: str | None = None,
     ) -> None:
-        """Wire up the SMU + light sub-controllers (does not connect)."""
-        self._smu = SMUKeysightProbot(address=smu_address, device_no=smu_device_no)
+        """Wire up the SMU + light sub-controllers (does not connect).
+
+        Measurement settings arrive as method kwargs (with defaults), so there is no
+        parameter directory to configure - only ``data_dir`` for where results are
+        written.
+        """
+        self._smu = KeysightProbot(address=smu_address, device_no=smu_device_no)
         self.light = PicoProbot(ip=pico_ip, device_id=pico_id)
         # Alias expected by the measurement routines.
         self.pico_instrument = self.light
 
-        self._param_dir = param_dir or os.environ.get("PROBOT_PARAM_DIR") or _DEFAULT_PARAM_DIR
         self._data_dir = data_dir or os.environ.get("PROBOT_DATA_DIR") or _DEFAULT_DATA_DIR
 
         logger.info(
-            "SMUKeysightProbotMachine initialised (smu_address=%s, pico_ip=%s, param_dir=%s)",
-            smu_address, pico_ip, self._param_dir,
+            "KeysightPicoProbotMachine initialised (smu_address=%s, pico_ip=%s, data_dir=%s)",
+            smu_address, pico_ip, self._data_dir,
         )
 
     @property
@@ -139,25 +390,6 @@ class SMUKeysightProbotMachine:
         """Turn the Pico light off (0%)."""
         return self.light.light_off()
 
-
-    def _param_file(self, name):
-        """Resolve a parameter CSV inside the configurable parameter directory.
-
-        Falls back to a case-insensitive match (the source uses inconsistent
-        casing, e.g. ``Voltage_Steady`` vs ``voltage_steady``) so the routines
-        work on case-sensitive filesystems too.
-        """
-        path = os.path.join(self._param_dir, name)
-        if os.path.exists(path):
-            return path
-        try:
-            lower = name.lower()
-            for fn in os.listdir(self._param_dir):
-                if fn.lower() == lower:
-                    return os.path.join(self._param_dir, fn)
-        except OSError:
-            pass
-        return path
 
     def _data_path(self, *parts):
         """Return (creating if needed) a data output directory under the data root."""
@@ -378,7 +610,7 @@ class SMUKeysightProbotMachine:
             no_of_pulses: no of pulses (count). Default 5.
             compliance: compliance (mA). Default 1.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -439,7 +671,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -516,7 +748,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 100.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -590,7 +822,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 100.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -668,7 +900,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             compliance: compliance (mA). Default 100.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -735,7 +967,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 10.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -833,7 +1065,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 20.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -957,7 +1189,7 @@ class SMUKeysightProbotMachine:
             trigger_period: trigger period (s). Default 0.1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1082,7 +1314,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1187,7 +1419,7 @@ class SMUKeysightProbotMachine:
             no_cycles: no cycles (count). Default 1.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1384,7 +1616,7 @@ class SMUKeysightProbotMachine:
             light_on_duration: light on duration (s). Default 1.0.
             light_off_duration: light off duration (s). Default 1.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1456,7 +1688,7 @@ class SMUKeysightProbotMachine:
             compliance: compliance (mA). Default 0.001.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1520,7 +1752,7 @@ class SMUKeysightProbotMachine:
                 compliance: compliance (mA). Default 0.001.
                 measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-            Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+            Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
             contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
             ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
             saved data.
@@ -1589,7 +1821,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             compliance: compliance (mA). Default 100.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1711,7 +1943,7 @@ class SMUKeysightProbotMachine:
             t_pulse_to_pulse: t pulse to pulse. Default 0.5.
             wait_voltage: wait voltage (V). Default 0.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1837,7 +2069,7 @@ class SMUKeysightProbotMachine:
             compliance_voltage: compliance voltage (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -1971,7 +2203,7 @@ class SMUKeysightProbotMachine:
             volt_sense_range: volt sense range. Default 2.0.
             curr_sense_range: curr sense range. Default 1e-07.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2101,7 +2333,7 @@ class SMUKeysightProbotMachine:
             compliance_current: compliance current (mA). Default 0.001.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2239,7 +2471,7 @@ class SMUKeysightProbotMachine:
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
             soaking_time: soaking time (s). Default 0.0.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2405,7 +2637,7 @@ class SMUKeysightProbotMachine:
             voltage_compliance: voltage compliance (mA). Default 1.0.
             measure_delay_position: measure delay position (fraction of trigger period). Default 0.5.
 
-        Sequencing (PUDA): runs on the ``smu-keysight-probot`` machine. Position and
+        Sequencing (PUDA): runs on the ``probot-keysight-pico`` machine. Position and
         contact the cell first via the ``stage-probot`` machine (``move_to_cell`` then
         ``probe``), and ``unprobe`` once this returns; ``cell_number`` only labels the
         saved data.
@@ -2532,4 +2764,4 @@ class SMUKeysightProbotMachine:
 
 # Alias: measurement_list() advertises ``Keysight_Digital_Retention`` while the
 # implementation is ``Keysight_Digital_Endurance`` (reads the Retention CSV).
-SMUKeysightProbotMachine.Keysight_Digital_Retention = SMUKeysightProbotMachine.Keysight_Digital_Endurance
+KeysightPicoProbotMachine.Keysight_Digital_Retention = KeysightPicoProbotMachine.Keysight_Digital_Endurance

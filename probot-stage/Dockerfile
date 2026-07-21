@@ -15,11 +15,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # for reproducible builds; without it uv resolves at build time.
 COPY pyproject.toml ./
 COPY probot-stage/pyproject.toml probot-stage/pyproject.toml
-COPY probot_drivers/pyproject.toml probot_drivers/README.md probot_drivers/
 
 RUN uv sync --no-dev --no-install-project --package probot-stage-edge
 
-COPY probot_drivers/ probot_drivers/
 COPY probot-stage/ probot-stage/
 
 WORKDIR /app/probot-stage

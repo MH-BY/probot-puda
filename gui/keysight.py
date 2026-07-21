@@ -5,9 +5,9 @@ expects a module-level ``measurement_list()`` and a no-arg ``KeysightInstrument`
 class, then calls ``getattr(instrument, measurement)(cell_number)``.
 
 This shim preserves that exact contract while delegating to the shared
-``probot_drivers`` package, so the GUI and the PUDA ``probot-smu-keysight`` edge
+``probot_drivers`` package, so the GUI and the PUDA ``probot-keysight-pico`` edge
 run identical driver code. A single process-wide
-:class:`~probot_drivers.probot_machine_smu.SMUKeysightProbotMachine` backs every
+:class:`~probot_drivers.probot_machine_keysight_pico.KeysightPicoProbotMachine` backs every
 ``KeysightInstrument()`` (the GUI builds one per measurement) so the VISA session
 and Pico connection are opened once, not per cell.
 
@@ -19,7 +19,7 @@ back to ``None`` (the SMU then auto-selects the first VISA resource).
 import os
 import logging
 
-from probot_drivers import SMUKeysightProbotMachine
+from probot_drivers import KeysightPicoProbotMachine
 from probot_drivers import measurement_list as _measurement_list
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def measurement_list():
     return _measurement_list()
 
 
-def _get_machine() -> SMUKeysightProbotMachine:
+def _get_machine() -> KeysightPicoProbotMachine:
     """Return the process-wide SMU+light machine, connecting on first use.
 
     The stage is a separate device handled by the ``probebot`` shim, so it is not
@@ -40,7 +40,7 @@ def _get_machine() -> SMUKeysightProbotMachine:
     """
     global _shared_machine
     if _shared_machine is None:
-        machine = SMUKeysightProbotMachine(
+        machine = KeysightPicoProbotMachine(
             smu_address=os.environ.get("KEYSIGHT_ADDRESS") or None,
             smu_device_no=int(os.environ.get("KEYSIGHT_DEVICE_NO", "0")),
             pico_ip=os.environ.get("PICO_IP") or None,
